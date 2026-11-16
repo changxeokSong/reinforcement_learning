@@ -27,6 +27,8 @@ EXPERIMENTS = {
            ("ppo_ent0.03", "ppo", {"ent_coef": 0.03})],
     # E4 보조 보상: 공을 넘길 때마다 +0.1
     "e4": [("ppo_shaping", "ppo", {"shaping": 0.1})],
+    # E5 같은 시간 비교: PPO에 4배 스텝(1200만)을 준다. 실제 학습 시간이 DQN과 비슷해진다
+    "e5": [("ppo_12m", "ppo", {"total_steps": 12_000_000})],
     # P1 예비 실험: 본 실험 전에 PPO 설정을 점검한다 (seed 0, 1만 사용)
     "p1": [("ppo_base", "ppo", {}),
            ("ppo_noanneal", "ppo", {"anneal_lr": "false"}),
@@ -63,8 +65,11 @@ def main():
                        "--out", str(out)]
                 if settings:
                     cmd += ["--set"] + [f"{k}={v}" for k, v in settings.items()]
-                jobs.append((out, cmd))
+                # 대략적인 소요 시간 (PPO 300만 스텝 = 1). 오래 걸리는 것부터 시작해야 전체가 빨리 끝난다
+                cost = {"sac": 12, "dqn": 5, "ppo": 1}[algo] * settings.get("total_steps", 3_000_000) / 3_000_000
+                jobs.append((cost, out, cmd))
 
+    jobs = [(out, cmd) for _, out, cmd in sorted(jobs, key=lambda j: -j[0])]
     print(f"학습 {len(jobs)}개를 최대 {args.parallel}개씩 동시에 실행합니다.")
     running, failed, start = [], [], time.time()
     while jobs or running:

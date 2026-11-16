@@ -6,7 +6,7 @@
 - 알고리즘: PPO, Double DQN, 이산 SAC를 PyTorch로 직접 구현
 - 비교: 같은 학습 스텝, 같은 상대, 같은 평가. seed 5개와 95% 신뢰구간
 
-> 현재 상태: 코드 완성, 본 실험 실행 전. 아래 "실험 결과"와 "학습된 모델"은 실험 후 채운다.
+> 현재 상태: 본 실험(5개 실험, 학습 50회) 완료. 결과는 [실험 결과](docs/results.md)에 있다.
 
 ## 설치
 
@@ -57,9 +57,16 @@ python train.py --algo sac --seed 0 --set total_steps=1000000 action_set=basic
 python -m tests.test_game          # 게임·통계 코드 검증
 python -m tests.check_algos        # 알고리즘 구현 검증 (CartPole)
 
-python -m experiments.run e1 e2 e3 e4 --parallel 12   # 본 실험 (seed 5개씩)
-python -m analysis.league runs/e1 runs/e2 runs/e3 runs/e4   # 리그전
-python -m analysis.report runs/e1 runs/e2 runs/e3 runs/e4   # 그래프와 표
+python -m experiments.final       # 모든 실험 + 리그전 + 그래프·표 (약 2시간 30분)
+```
+
+`experiments.final`은 아래를 차례로 실행한다. 하나씩 돌릴 수도 있다.
+
+```powershell
+python -m experiments.run e1 e2 e3 e4 e5 --parallel 14          # 학습 (seed 5개씩, 총 50회)
+python -m analysis.league runs/e1 runs/e2 runs/e3 runs/e4 runs/e5 --out runs/results/league
+python -m analysis.report runs/e1 runs/e2 --out runs/results/e2_action_space   # 실험별 그래프와 표
+python -m analysis.dashboard runs/e1 runs/e2 runs/e3 runs/e4 runs/e5            # 대시보드 (html)
 ```
 
 ## 눈으로 확인하기
@@ -77,10 +84,11 @@ python play.py --left runs/e1/dqn_seed0/model.pt --right runs/e1/ppo_seed0/model
 |---|---|---|
 | e1 | PPO vs DQN vs SAC (확장 행동 18개) | 15 |
 | e2 | 같은 알고리즘, 기본 행동 6개 (이동·점프만) | 15 |
-| e3 | PPO entropy 계수 0 / 0.01 / 0.03 | 10 |
+| e3 | PPO entropy 계수 0 / 0.03 (0.01은 e1과 공유) | 10 |
 | e4 | PPO 보조 보상 (공을 넘기면 +0.1) | 5 |
+| e5 | PPO 1200만 스텝 (같은 시간 비교) | 5 |
 
-학습 1회(300만 스텝)에 걸리는 시간은 i7-13700KF에서 PPO 약 7분, DQN 약 35분, SAC 약 85분이다. 중간에 끊겨도 같은 명령을 다시 실행하면 끝난 것은 건너뛴다.
+학습 1회(300만 스텝)에 걸리는 시간은 i7-13700KF에서 14개를 동시에 돌릴 때 PPO 약 10분, DQN 약 56분, SAC 약 2시간이다. 중간에 끊겨도 같은 명령을 다시 실행하면 끝난 것은 건너뛴다.
 
 ## 환경 요약
 
@@ -112,12 +120,28 @@ watch.py      학습하면서 알고리즘끼리 붙는 모습을 실시간으�
 experiments/  실험 일괄 실행
 analysis/     리그전, Elo, 신뢰구간, 그래프, 실시간 모니터, 학습 과정 영상
 tests/        게임 검증, 알고리즘 검증
-docs/         계획, 보고서 구성
+docs/         계획, 보고서 구성, 실험 결과, 그래프
 ```
 
 ## 실험 결과
 
-본 실험 후 그래프와 표를 여기에 넣는다.
+seed 5개의 평균 ± 95% 신뢰구간이다. 자세한 표와 해석은 [실험 결과](docs/results.md)에 있다.
+
+| 설정 | 어려움 봇 상대 승률 | 리그전 Elo | 학습 시간(분) |
+|---|---|---|---|
+| PPO 300만 스텝 | 0.26 ± 0.09 | 892 ± 18 | 10 |
+| DQN 300만 스텝 | **0.67 ± 0.07** | 1110 ± 38 | 56 |
+| SAC 300만 스텝 | 0.55 ± 0.04 | 1022 ± 58 | 128 |
+| PPO 1200만 스텝 | 0.63 ± 0.10 | **1227 ± 28** | 35 |
+| SAC 기본 행동 (스파이크·다이빙 없음) | **0.88 ± 0.10** | 1135 ± 66 | 138 |
+
+- 같은 스텝에서는 DQN > SAC > PPO. 같은 시간을 주면 PPO가 가장 강하다.
+- SAC는 스파이크·다이빙을 빼자 오히려 훨씬 강해졌고, DQN은 그 기술이 있어야 학습된 상대를 이겼다.
+- PPO의 entropy 계수와 보조 보상은 의미 있는 차이를 만들지 못했다.
+
+![리그전 Elo](docs/figures/league_elo.png)
+
+![어려움 봇 상대 승률 학습 곡선](docs/figures/e1_curves_wr_hard.png)
 
 ## 학습된 모델
 
