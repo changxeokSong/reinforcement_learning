@@ -26,6 +26,7 @@ DEFAULTS = {
     "target_entropy_ratio": 0.3,   # 목표 엔트로피 = ratio × log(행동 수)
     "init_alpha": 0.2,
     "hidden": 256,
+    "grad_clip": None,             # 기울기 노름 상한 (Q값 발산 방지). None이면 쓰지 않는다 (배구 실험과 같음)
 }
 
 
@@ -91,6 +92,8 @@ class SAC:
         q_loss = F.mse_loss(q1, target) + F.mse_loss(q2, target)
         self.q_opt.zero_grad()
         q_loss.backward()
+        if c["grad_clip"]:
+            torch.nn.utils.clip_grad_norm_(list(self.q1.parameters()) + list(self.q2.parameters()), c["grad_clip"])
         self.q_opt.step()
 
         # ---- actor: 행동 확률로 기대값을 정확히 계산 ----
@@ -101,6 +104,8 @@ class SAC:
         actor_loss = (p * (alpha * logp - q_min)).sum(-1).mean()
         self.actor_opt.zero_grad()
         actor_loss.backward()
+        if c["grad_clip"]:
+            torch.nn.utils.clip_grad_norm_(self.actor.parameters(), c["grad_clip"])
         self.actor_opt.step()
 
         # ---- alpha: 엔트로피가 목표보다 낮으면 alpha를 키운다 ----

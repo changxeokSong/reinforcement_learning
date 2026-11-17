@@ -22,13 +22,13 @@ LEVELS = [1, 2, 3, 4]
 # 비교 묶음: 이름 → 그룹 목록 (실험/설정)
 COMPARISONS = {
     "x1_algorithms": ["x1/ppo", "x1/dqn", "x1/sac"],
-    "x2_training": ["x1/ppo", "x2/ppo_random", "x2/ppo_level4"],
+    "x2_training": ["x1/ppo", "x2/ppo_curmix", "x2/ppo_random", "x2/ppo_level4"],
     "x3_observation": ["x1/ppo", "x3/ppo_rawobs"],
     "x4_reward": ["x1/ppo", "x4/ppo_notimepen", "x4/ppo_noshaping"],
 }
 LABELS = {
     "x1/ppo": "PPO (curriculum)", "x1/dqn": "DQN (curriculum)", "x1/sac": "SAC (curriculum)",
-    "x2/ppo_random": "PPO random level", "x2/ppo_level4": "PPO level 4 only",
+    "x2/ppo_random": "PPO random level", "x2/ppo_curmix": "PPO curriculum + review", "x2/ppo_level4": "PPO level 4 only",
     "x3/ppo_rawobs": "PPO raw observation",
     "x4/ppo_notimepen": "PPO no time penalty", "x4/ppo_noshaping": "PPO no shaping",
 }

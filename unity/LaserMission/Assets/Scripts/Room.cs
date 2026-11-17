@@ -119,6 +119,8 @@ namespace LaserMission
             var p = Academy.Instance.EnvironmentParameters;
             int lv = Mathf.RoundToInt(p.GetWithDefault("level", DefaultLevel));
             level = lv < 0 ? 1 + rng.Next(4) : Mathf.Clamp(lv, 0, 4);
+            // 커리큘럼 복습: level_mix 확률로 지금보다 낮은 레벨(1 ~ level-1)을 낸다 (앞 레벨을 잊지 않게)
+            if (level > 1 && rng.NextDouble() < p.GetWithDefault("level_mix", 0f)) level = 1 + rng.Next(level - 1);
             obsMode = Mathf.RoundToInt(p.GetWithDefault("obs_mode", 1f));
             time = 0f;
             pos = new Vector3(Rand(-2.5f, 2.5f), 0f, StartZ);

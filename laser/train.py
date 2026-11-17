@@ -31,6 +31,7 @@ COMMON = {
     "level": "curriculum",
     "shaping": 0.5,             # 금고 쪽으로 다가간 거리에 주는 보조 보상 (출발→금고 전체 합)
     "time_penalty": 0.01,       # 매 결정(0.1초)마다 빼는 시간 벌점
+    "level_mix": 0.0,           # 커리큘럼 복습: 이 확률로 지금보다 낮은 레벨을 낸다
     "obs_mode": 1,              # 1: 설계한 레이저 특징, 0: 원시 선분 좌표
     "build": None,              # Unity 실행 파일 (기본: unity/LaserMission/Build)
     "curriculum_threshold": 0.8,
@@ -103,6 +104,7 @@ def train(algo, seed, overrides, out_dir, worker_id=0):
     if common["build"]:
         env_kw["build"] = common["build"]
     env = LaserEnv(n_areas=n, seed=seed, worker_id=worker_id, level=level, **env_kw)
+    env.set_param("level_mix", common["level_mix"])
     eval_env = LaserEnv(n_areas=common["eval_areas"], seed=seed + 1000, worker_id=worker_id + 1,
                         level=1, **env_kw)
 

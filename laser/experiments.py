@@ -21,12 +21,17 @@ EXPERIMENTS = {
     "x1": [(a, a, {}) for a in ["ppo", "dqn", "sac"]],
     # X2 학습 방식: 레벨 무작위 / 처음부터 레벨 4 (커리큘럼은 X1의 ppo와 공유)
     "x2": [("ppo_random", "ppo", {"level": "random"}),
-           ("ppo_level4", "ppo", {"level": 4})],
+           ("ppo_level4", "ppo", {"level": 4}),
+           ("ppo_curmix", "ppo", {"level_mix": 0.5})],
     # X3 관측 설계: 원시 선분 좌표 (설계한 특징은 X1의 ppo와 공유)
     "x3": [("ppo_rawobs", "ppo", {"obs_mode": 0})],
     # X4 보상 설계: 시간 벌점 없음 / 보조 보상 없음
     "x4": [("ppo_notimepen", "ppo", {"time_penalty": 0.0}),
            ("ppo_noshaping", "ppo", {"shaping": 0.0})],
+    # X5 학습량: PPO가 400만 스텝에서 멈춘 것이 학습량 부족 때문인지 (SAC는 400만에서 0.9 이상)
+    "x5": [("ppo_random_20m", "ppo", {"level": "random", "total_steps": 20_000_000})],
+    # X6 SAC 안정화: X1에서 seed 1의 Q값이 발산했다 → 기울기 노름 상한
+    "x6": [("sac_clip", "sac", {"grad_clip": 10.0})],
 }
 COST = {"ppo": 1, "dqn": 3, "sac": 5}
 
@@ -34,7 +39,8 @@ COST = {"ppo": 1, "dqn": 3, "sac": 5}
 def prepare_build(root):
     """학습용으로 실행 파일을 복사한다 (Build보다 오래됐으면 다시 복사)."""
     src = DEFAULT_BUILD.parent
-    dst = Path(root) / "laser_bin"
+    # 빌드 시각별로 따로 복사한다: 돌고 있는 학습이 쓰는 실행 파일을 지우지 않게
+    dst = Path(root) / f"laser_bin_{int(DEFAULT_BUILD.stat().st_mtime)}"
     stamp = dst / "LaserMission.exe"
     if not stamp.exists() or stamp.stat().st_mtime < DEFAULT_BUILD.stat().st_mtime:
         shutil.rmtree(dst, ignore_errors=True)
@@ -50,6 +56,7 @@ def main():
     ap.add_argument("--parallel", type=int, default=8)
     ap.add_argument("--steps", type=int, default=None)
     ap.add_argument("--root", default="runs")
+    ap.add_argument("--worker-base", type=int, default=200, help="다른 실험과 동시에 돌릴 때 겹치지 않게")
     args = ap.parse_args()
 
     build = prepare_build(args.root)
@@ -69,7 +76,7 @@ def main():
     print(f"학습 {len(jobs)}개를 최대 {args.parallel}개씩 동시에 실행합니다.", flush=True)
 
     running, failed, start, slot = [], [], time.time(), 0
-    free_workers = list(range(200, 200 + 4 * args.parallel, 4))
+    free_workers = list(range(args.worker_base, args.worker_base + 4 * args.parallel, 4))
     while jobs or running:
         while jobs and len(running) < args.parallel:
             _, out, algo, seed, settings = jobs.pop(0)

@@ -171,6 +171,17 @@ python -m laser.report                                                      # �
 .venv-unity\Scripts\python -m laser.record <model.pt> --level 3 --out play.gif   # GIF 녹화
 ```
 
+결과 (400만 스텝, seed 3개, 레벨 1~4 평균 성공률. 자세한 내용은 [실험 결과](docs/results.md#레이저-미션-결과))
+
+| 설정 | 성공률 | 비고 |
+|---|---|---|
+| SAC | 0.62 | seed 2개는 0.98·0.89, 1개는 Q값 발산으로 0 |
+| PPO 레벨 무작위 | 0.66 | 커리큘럼(0.53)보다 좋음. 커리큘럼은 앞 레벨을 잊는다 |
+| PPO 커리큘럼 | 0.53 | seed 사이 편차가 가장 작다 |
+| DQN | 0.40 | 가장 불안정 |
+
+![laser algorithms](docs/figures/laser_x1_algorithms.png)
+
 캐릭터는 그림 생성 AI로 직접 디자인한 알바트로스를 3D 생성 AI로 모델링하고, 원본 그림을 투영해서 색을 입힌 뒤 날개·다리를 잘라 움직이게 했다 (`tools/split_bird.py`). 학교 공식 캐릭터가 아니다.
 
 ## 학습된 모델
