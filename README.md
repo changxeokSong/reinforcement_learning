@@ -147,6 +147,32 @@ seed 5개의 평균 ± 95% 신뢰구간이다. 자세한 표와 해석은 [실�
 
 ![어려움 봇 상대 승률 학습 곡선](docs/figures/e1_curves_wr_hard.png)
 
+## 두 번째 환경: 레이저 미션 (Unity 3D)
+
+알바트로스가 움직이는 레이저를 피해 금고까지 가는 1인 미션이다. Unity 6 + ML-Agents로 만들었고, 배구와 같은 PPO·DQN·SAC 구현으로 학습한다. 환경 설계와 학습이 안 되던 원인을 하나씩 고친 과정은 [레이저 미션 문서](docs/laser.md)에 있다.
+
+준비 (Unity 6000.0 LTS, Python 3.10)
+
+```powershell
+py -3.10 -m venv .venv-unity
+.venv-unity\Scripts\python -m pip install -r requirements-unity.txt --extra-index-url https://download.pytorch.org/whl/cpu
+# 실행 파일 빌드 (에디터를 열지 않고 명령줄로)
+& "C:\Program Files\Unity\Hub\Editor\6000.0.85f2\Editor\Unity.exe" -batchmode -quit -projectPath unity/LaserMission -executeMethod LaserBuild.All
+```
+
+실행
+
+```powershell
+unity\LaserMission\Build\LaserMission.exe                                 # 직접 해 보기 (WASD, Space 점프, C 슬라이딩, 0~4 레벨)
+.venv-unity\Scripts\python -m laser.train --algo ppo --seed 0              # 학습
+.venv-unity\Scripts\python -m laser.watch runs/laser/ppo_seed0             # 학습 중인 AI를 게임 창으로 관전
+.venv-unity\Scripts\python -m laser.experiments x1 x2 x3 x4 --parallel 8   # 실험 전체
+python -m laser.report                                                      # 표·그래프
+.venv-unity\Scripts\python -m laser.record <model.pt> --level 3 --out play.gif   # GIF 녹화
+```
+
+캐릭터는 그림 생성 AI로 직접 디자인한 알바트로스를 3D 생성 AI로 모델링하고, 원본 그림을 투영해서 색을 입힌 뒤 날개·다리를 잘라 움직이게 했다 (`tools/split_bird.py`). 학교 공식 캐릭터가 아니다.
+
 ## 학습된 모델
 
 [Releases v1.0](https://github.com/changxeokSong/reinforcement_learning/releases/tag/v1.0)에 있다.
