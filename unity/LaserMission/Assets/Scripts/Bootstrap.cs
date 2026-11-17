@@ -22,6 +22,8 @@ namespace LaserMission
         string shotPath;                // -shot 경로: 화면을 찍고 종료한다 (보고서·확인용)
         float shotDelay = 4f;
         int shotCount = 1, shotsTaken;
+        string recordDir;               // -record 폴더: 매 프레임을 PNG로 저장한다 (GIF 녹화용, 30fps)
+        int recordFrame;
 
         void Awake()
         {
@@ -39,6 +41,7 @@ namespace LaserMission
                 if (args[i] == "-shot") shotPath = args[i + 1];
                 if (args[i] == "-shotdelay") float.TryParse(args[i + 1], out shotDelay);
                 if (args[i] == "-shots") int.TryParse(args[i + 1], out shotCount);
+                if (args[i] == "-record") recordDir = args[i + 1];
             }
             int cols = Mathf.CeilToInt(Mathf.Sqrt(areas));
             for (int i = 0; i < areas; i++)
@@ -74,6 +77,11 @@ namespace LaserMission
 
         void LateUpdate()
         {
+            if (recordDir != null)
+            {
+                Time.captureFramerate = 30;
+                ScreenCapture.CaptureScreenshot(System.IO.Path.Combine(recordDir, $"frame_{recordFrame++:00000}.png"));
+            }
             if (cam == null || rooms.Count == 0) return;
             var room = rooms[0];
             var agentPos = room.transform.Find("AgentVis").position;
