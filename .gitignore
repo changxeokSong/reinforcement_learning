@@ -26,3 +26,4 @@ Thumbs.db
 # Commercial game files and saves stay outside the repository
 game_files/
 save_backups/
+.venv-unity/

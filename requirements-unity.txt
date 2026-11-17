@@ -1,0 +1,5 @@
+# Unity 레이저 미션용 (Python 3.10). 배구용 requirements.txt와 따로 설치한다.
+#   py -3.10 -m venv .venv-unity
+#   .venv-unity\Scripts\python -m pip install -r requirements-unity.txt --extra-index-url https://download.pytorch.org/whl/cpu
+mlagents-envs==1.1.0
+torch==2.14.1
