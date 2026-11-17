@@ -29,6 +29,15 @@ EXPERIMENTS = {
     "e4": [("ppo_shaping", "ppo", {"shaping": 0.1})],
     # E5 같은 시간 비교: PPO에 4배 스텝(1200만)을 준다. 실제 학습 시간이 DQN과 비슷해진다
     "e5": [("ppo_12m", "ppo", {"total_steps": 12_000_000})],
+    # E6 SAC 목표 엔트로피 비율. 기본값 0.3은 E1의 sac와 같다
+    "e6": [("sac_ent0.1", "sac", {"target_entropy_ratio": 0.1}),
+           ("sac_ent0.5", "sac", {"target_entropy_ratio": 0.5})],
+    # E7 DQN 탐험 기간(epsilon을 줄이는 구간). 기본값 0.3은 E1의 dqn과 같다
+    "e7": [("dqn_eps0.1", "dqn", {"eps_fraction": 0.1}),
+           ("dqn_eps0.5", "dqn", {"eps_fraction": 0.5})],
+    # E8 학습 상대 구성(PPO): self-play 비율 0.3 / 0.9. 나머지는 쉬움·무작위 봇이 반씩. 기본값 0.6은 E1과 같다
+    "e8": [("ppo_self0.3", "ppo", {"opp_self": 0.3, "opp_easy": 0.35, "opp_random": 0.35}),
+           ("ppo_self0.9", "ppo", {"opp_self": 0.9, "opp_easy": 0.05, "opp_random": 0.05})],
     # P1 예비 실험: 본 실험 전에 PPO 설정을 점검한다 (seed 0, 1만 사용)
     "p1": [("ppo_base", "ppo", {}),
            ("ppo_noanneal", "ppo", {"anneal_lr": "false"}),

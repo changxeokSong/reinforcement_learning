@@ -9,6 +9,9 @@
   e3_entropy/             E1 PPO + E3 entropy 계수 비교
   e4_shaping/             E1 PPO + E4 보조 보상
   e5_same_time/           E1 + E5 같은 시간 비교
+  e6_sac_entropy/         E1 + E6 SAC 목표 엔트로피
+  e7_dqn_epsilon/         E1 + E7 DQN 탐험 기간
+  e8_opponents/           E1 + E8 학습 상대 구성
   dashboard.html          전체 대시보드
 """
 import argparse
@@ -22,7 +25,11 @@ COMPARISONS = {
     "e3_entropy": ["runs/e1", "runs/e3"],
     "e4_shaping": ["runs/e1", "runs/e4"],
     "e5_same_time": ["runs/e1", "runs/e5"],
+    "e6_sac_entropy": ["runs/e1", "runs/e6"],
+    "e7_dqn_epsilon": ["runs/e1", "runs/e7"],
+    "e8_opponents": ["runs/e1", "runs/e8"],
 }
+EXPERIMENTS = ["e1", "e2", "e3", "e4", "e5", "e6", "e7", "e8"]
 
 
 def run(args):
@@ -38,13 +45,13 @@ def main():
     args = ap.parse_args()
 
     start = time.time()
-    code = run(["-m", "experiments.run", "e1", "e2", "e3", "e4", "e5",
+    code = run(["-m", "experiments.run", *EXPERIMENTS,
                 "--seeds", *args.seeds, "--parallel", str(args.parallel)])
     if code != 0:
         print("일부 학습이 실패했습니다. 성공한 것만으로 정리합니다.", flush=True)
     print(f"\n학습 단계 끝 ({(time.time() - start) / 60:.0f}분)", flush=True)
 
-    all_dirs = ["runs/e1", "runs/e2", "runs/e3", "runs/e4", "runs/e5"]
+    all_dirs = [f"runs/{e}" for e in EXPERIMENTS]
     run(["-m", "analysis.league", *all_dirs, "--points", args.league_points,
          "--workers", str(args.parallel), "--out", "runs/results/league"])
     for name, dirs in COMPARISONS.items():
