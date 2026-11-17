@@ -28,15 +28,15 @@
 | 12 | SAC | 알고리즘 | 이산 SAC가 연속 SAC와 다른 점, 자동 온도 조절 | `algos/sac.py` |
 | 13 | 하이퍼파라미터 | hyperparameter | 알고리즘별 설정 표 | 각 파일의 `DEFAULTS`, `config.json` |
 | 14 | 구현 검증 | 알고리즘 구현 | CartPole 통과 결과, 게임 대칭성·재현성 테스트 | `tests/` 실행 결과 |
-| 15 | 실험 셋업 | 실험 환경 | PC 사양, 학습 스텝, seed 5개, 실험 4종 표 | `config.json`, `experiments/run.py` |
+| 15 | 실험 셋업 | 실험 환경 | PC 사양, 학습 스텝, seed 5개, 실험 8종 표 | `config.json`, `experiments/run.py` |
 | 16 | 평가 지표 | Evaluation metric | 봇 상대 승률, 리그전 승률·Elo, 플레이 통계. 신뢰구간 계산 방법 | `analysis/stats.py` |
 | 17 | E1 학습 곡선 | 여러 알고리즘 비교 | 어려움 봇 상대 승률 곡선 (평균 ± 95% CI) | `report/curves_wr_hard.png` |
 | 18 | E1 최종 결과 | 여러 알고리즘 비교, seed·신뢰구간 | 결과 표, seed별 값 | `report/summary.md` |
 | 19 | E1 리그전 | 여러 알고리즘 비교 | 승률 히트맵, Elo 막대 | `report/league_heatmap.png`, `league_elo.png` |
 | 20 | 표본 효율과 시간 | 결과 해석 | 스텝 기준과 실제 시간 기준 비교 | `summary.md`의 학습 시간, `metrics.csv`의 `wall_sec` |
 | 21 | E2 행동 공간 | 다양한 설정 | 기본 6개 vs 확장 18개 | e1+e2 report |
-| 22 | E3 하이퍼파라미터 | hyperparameter 비교 | PPO entropy 계수 3종 | e1+e3 report |
-| 23 | E4 보조 보상 | 다양한 설정 | 보조 보상 유무, reward hacking 여부 | e1+e4 report |
+| 22 | E3·E6·E7 하이퍼파라미터 | hyperparameter 비교 | 알고리즘별 탐험 설정 3종씩: PPO entropy, SAC 목표 엔트로피, DQN epsilon 구간 | e1+e3, e1+e6, e1+e7 report |
+| 23 | E4·E5·E8 설정 비교 | 다양한 설정 | 보조 보상, 같은 시간 비교(PPO 1200만 스텝), 학습 상대 구성 | e1+e4, e1+e5, e1+e8 report |
 | 24 | 플레이 스타일 | 결과 해석 | 알고리즘별 스파이크·다이빙 빈도, 대표 장면 | `curves_spikes.png`, `curves_dives.png`, GIF |
 | 25 | 토의 | 실험 결과에 대한 생각 | 왜 그런 차이가 났는지, 예상과 달랐던 점, 실패 사례 | |
 | 26 | 한계와 개선 | 보완 및 개선사항 | seed 수, 봇이 기준으로서 갖는 한계, 연속 행동, 2:2 확장 | |
