@@ -66,6 +66,15 @@ namespace LaserMission
             return f < duty;
         }
 
+        /// <summary>깜빡이는 레이저가 다음에 켜지거나 꺼질 때까지 남은 시간(초). 다른 종류는 0.</summary>
+        public float TimeToToggle(float t)
+        {
+            if (kind != LaserKind.Blinker) return 0f;
+            float f = t / period + phase;
+            f -= Mathf.Floor(f);
+            return (f < duty ? duty - f : 1f - f) * period;
+        }
+
         /// <summary>두 선분 사이의 최소 거리 (캡슐-선분 충돌 판정에 쓴다).</summary>
         public static float SegmentDistance(Vector3 p1, Vector3 q1, Vector3 p2, Vector3 q2)
         {

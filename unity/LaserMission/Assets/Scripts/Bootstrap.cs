@@ -46,6 +46,10 @@ namespace LaserMission
                 var origin = new Vector3((i % cols) * spacing, 0f, (i / cols) * 24f);
                 rooms.Add(Room.Create(i, origin, materials, seed));
             }
+            var fx = gameObject.AddComponent<Effects>();
+            fx.room = rooms[0];
+            fx.cam = cam != null ? cam.transform : null;
+            fx.particleMat = materials.particle;
         }
 
         void Update()
@@ -118,7 +122,7 @@ namespace LaserMission
             }
             else
                 GUI.Label(new Rect(16, 36, 900, 30),
-                    "WASD move  SPACE jump  C crouch  |  0-4 level  V camera  R restart", small);
+                    "WASD move  SPACE jump  C slide  |  0-4 level  V camera  R restart  M mute", small);
             if (Time.time - r.lastResultTime < 1.0f)
             {
                 var color = r.lastResult == "SUCCESS" ? new Color(0.3f, 1f, 0.4f) : new Color(1f, 0.3f, 0.3f);

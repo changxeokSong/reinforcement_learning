@@ -25,7 +25,7 @@ EPISODE_STEPS = 200          # 20초 = 결정 200번
 
 
 class LaserEnv:
-    def __init__(self, n_areas=16, seed=0, worker_id=0, level=0, shaping=0.5, time_penalty=0.01,
+    def __init__(self, n_areas=16, seed=0, worker_id=0, level=0, shaping=0.5, time_penalty=0.01, obs_mode=1,
                  time_scale=100.0, graphics=False, build=DEFAULT_BUILD):
         self.n = n_areas
         self.engine = EngineConfigurationChannel()
@@ -42,6 +42,7 @@ class LaserEnv:
         self.set_level(level)
         self.set_param("shaping", shaping)
         self.set_param("time_penalty", time_penalty)
+        self.set_param("obs_mode", obs_mode)
         self.env.reset()
         self.behavior = list(self.env.behavior_specs)[0]
         dec, _ = self.env.get_steps(self.behavior)

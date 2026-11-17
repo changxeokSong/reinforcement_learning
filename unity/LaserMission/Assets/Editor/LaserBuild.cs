@@ -34,6 +34,7 @@ public static class LaserBuild
             laserOff = Unlit("LaserOff", new Color(0.3f, 0.05f, 0.05f)),
             glow = Additive("LaserGlow", new Color(0.6f, 0.05f, 0.03f, 0.5f)),
             strip = Unlit("Strip", new Color(0.2f, 1.6f, 2.4f)),
+            particle = Particle("Particle"),
             character = MakeCharacter(),
         };
         AssetDatabase.SaveAssets();
@@ -114,6 +115,14 @@ public static class LaserBuild
     static Material Unlit(string name, Color color)
     {
         var m = new Material(Shader.Find("Unlit/Color")) { color = color };
+        return Save(m, name);
+    }
+
+    static Material Particle(string name)
+    {
+        var m = new Material(Shader.Find("Legacy Shaders/Particles/Additive"));
+        m.mainTexture = AssetDatabase.GetBuiltinExtraResource<Texture2D>("Default-Particle.psd");
+        m.SetColor("_TintColor", new Color(0.5f, 0.5f, 0.5f, 0.5f));
         return Save(m, name);
     }
 

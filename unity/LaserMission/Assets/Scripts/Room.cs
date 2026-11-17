@@ -39,6 +39,7 @@ namespace LaserMission
         // ---- 상태 ----
         public int index;
         public int level;
+        public int obsMode = 1;      // 1: 설계한 특징(종류·높이·앞쪽 정렬), 0: 원시 선분 좌표 (비교 실험용)
         public float time;
         public Vector3 pos;          // 발 위치
         public Vector3 vel;
@@ -48,6 +49,9 @@ namespace LaserMission
         public readonly List<Laser> lasers = new List<Laser>();
         public int successes, hits, timeouts;
         public string lastResult = "";
+        public int jumps, slides;    // 효과음·연출용 카운터 (화면 쪽에서 바뀌었는지 본다)
+        Transform vaultDoor;
+        float doorOpen;
         public float lastResultTime = -10f;
 
         System.Random rng;
@@ -70,7 +74,7 @@ namespace LaserMission
         [System.Serializable]
         public class Materials
         {
-            public Material floor, wall, agent, visor, laser, laserOff, vault, start, goal, emitter, glow, strip;
+            public Material floor, wall, agent, visor, laser, laserOff, vault, start, goal, emitter, glow, strip, particle;
             public GameObject character;     // 알바트로스 3D 모델 (없으면 도형으로 만든 캐릭터)
         }
 
@@ -115,6 +119,7 @@ namespace LaserMission
             var p = Academy.Instance.EnvironmentParameters;
             int lv = Mathf.RoundToInt(p.GetWithDefault("level", DefaultLevel));
             level = lv < 0 ? 1 + rng.Next(4) : Mathf.Clamp(lv, 0, 4);
+            obsMode = Mathf.RoundToInt(p.GetWithDefault("obs_mode", 1f));
             time = 0f;
             pos = new Vector3(Rand(-2.5f, 2.5f), 0f, StartZ);
             vel = Vector3.zero;
@@ -221,13 +226,14 @@ namespace LaserMission
             for (int s = 0; s < SubSteps; s++)
             {
                 // 숙이기는 슬라이딩: 한 번 누르면 SlideTime 동안 몸을 낮춘 채 미끄러진다
-                if (v == 2 && grounded && slideTimer <= 0f) slideTimer = SlideTime;
+                if (v == 2 && grounded && slideTimer <= 0f) { slideTimer = SlideTime; slides++; }
                 crouch = slideTimer > 0f;
                 if (crouch) slideTimer -= SubDt;
                 if (v == 1 && grounded && !crouch)
                 {
                     vel.y = JumpSpeed;
                     grounded = false;
+                    jumps++;
                 }
                 var dir = new Vector2(mx, mz);
                 if (dir.sqrMagnitude > 0f) dir.Normalize();
@@ -273,6 +279,23 @@ namespace LaserMission
             return o;
         }
 
+        /// <summary>화면에 그려지는 에이전트 위치 (효과 연출용).</summary>
+        public Vector3 AgentWorldPos => agentVis != null ? agentVis.position : transform.TransformPoint(pos);
+
+        /// <summary>에이전트에서 가장 가까운 켜진 레이저까지의 거리 (레이저 소리 크기용).</summary>
+        public float NearestLaserDistance()
+        {
+            AgentSegment(out var a, out var b);
+            float best = 99f;
+            foreach (var l in lasers)
+            {
+                if (!l.Active(time)) continue;
+                l.Segment(time, out var p, out var q);
+                best = Mathf.Min(best, Laser.SegmentDistance(a, b, p, q));
+            }
+            return best;
+        }
+
         void AgentSegment(out Vector3 a, out Vector3 b)
         {
             float h = crouch ? CrouchHeight : StandHeight;
@@ -309,7 +332,48 @@ namespace LaserMission
             o.Add(level / 4f);
             o.Add((GoalZ - pos.z) / (2f * HalfLength));
 
-            // 가까운 레이저부터 5개: 양 끝점(에이전트 기준), 중심 속도, 켜짐 여부, 존재 여부
+            if (obsMode == 0) { ObserveRaw(o); return; }
+
+            // 레이저 5개: 앞에 있는 것부터(지나간 것은 뒤로) 정렬한다.
+            // 레이저마다 종류(4), 에이전트에 가장 가까운 지점의 상대 x·실제 높이·상대 z,
+            // 그 지점의 속도(x, z), 켜짐, 깜빡임 전환까지 남은 시간 → 11개
+            var center = new Vector3(pos.x, pos.y + 0.9f, pos.z);
+            var items = new List<(float key, int i, Vector3 c)>();
+            for (int i = 0; i < lasers.Count; i++)
+            {
+                lasers[i].Segment(time, out var p, out var q);
+                var c = ClosestPoint(center, p, q);
+                float dz = c.z - pos.z;
+                // 앞(또는 거의 겹친) 레이저는 거리 순, 이미 지나간 레이저는 그 뒤
+                float key = dz > -0.6f ? Mathf.Abs(dz) : 100f - dz;
+                items.Add((key, i, c));
+            }
+            items.Sort((x, y) => x.key.CompareTo(y.key));
+            for (int k = 0; k < NearestLasers; k++)
+            {
+                if (k >= items.Count)
+                {
+                    for (int j = 0; j < 11; j++) o.Add(0f);
+                    continue;
+                }
+                var l = lasers[items[k].i];
+                var c = items[k].c;
+                for (int kind = 0; kind < 4; kind++) o.Add((int)l.kind == kind ? 1f : 0f);
+                o.Add((c.x - pos.x) / HalfWidth);
+                o.Add(c.y / 1.5f);
+                o.Add((c.z - pos.z) / 5f);
+                l.Segment(time + 0.1f, out var p2, out var q2);
+                var c2 = ClosestPoint(center, p2, q2);
+                o.Add((c2.x - c.x) / 0.1f / RunSpeed);
+                o.Add((c2.z - c.z) / 0.1f / RunSpeed);
+                o.Add(l.Active(time) ? 1f : 0f);
+                o.Add(l.TimeToToggle(time) / 2f);   // 깜빡이: 다음 전환까지 남은 시간 (종류 표시가 있으므로 '존재' 대신)
+            }
+        }
+
+        /// <summary>처음 설계한 관측: 가까운 순서로 레이저 선분의 양 끝점(상대 좌표), 중심 속도, 켜짐, 존재.</summary>
+        void ObserveRaw(List<float> o)
+        {
             var center = new Vector3(pos.x, pos.y + 0.9f, pos.z);
             var order = new List<(float d, int i)>();
             for (int i = 0; i < lasers.Count; i++)
@@ -338,6 +402,13 @@ namespace LaserMission
                 o.Add(l.Active(time) ? 1f : 0f);
                 o.Add(1f);
             }
+        }
+
+        static Vector3 ClosestPoint(Vector3 x, Vector3 a, Vector3 b)
+        {
+            var d = b - a;
+            float t = Mathf.Clamp01(Vector3.Dot(x - a, d) / Mathf.Max(d.sqrMagnitude, 1e-8f));
+            return a + d * t;
         }
 
         // ------------------------------------------------------------------
@@ -370,8 +441,16 @@ namespace LaserMission
             Prim(PrimitiveType.Cube, "WallFront", t, new Vector3(0, 1.0f, HalfLength + 0.1f), new Vector3(W + 0.4f, 2f, 0.2f), mats.wall);
             Prim(PrimitiveType.Cube, "StartPad", t, new Vector3(0, 0.005f, StartZ), new Vector3(W, 0.01f, 1.4f), mats.start);
             Prim(PrimitiveType.Cube, "GoalLine", t, new Vector3(0, 0.006f, GoalZ), new Vector3(W, 0.012f, 0.12f), mats.goal);
-            var vault = Prim(PrimitiveType.Cube, "Vault", t, new Vector3(0, 0.7f, 9.45f), new Vector3(1.6f, 1.4f, 0.9f), mats.vault);
-            Prim(PrimitiveType.Cylinder, "VaultDial", vault, new Vector3(0, 0.1f, -0.52f), new Vector3(0.35f, 0.04f, 0.35f), mats.emitter)
+            // 금고: 어두운 안쪽, 금괴, 경첩으로 열리는 문
+            Prim(PrimitiveType.Cube, "VaultBody", t, new Vector3(0, 0.75f, 9.5f), new Vector3(1.9f, 1.5f, 0.8f), mats.emitter);
+            for (int i = 0; i < 3; i++)
+                Prim(PrimitiveType.Cube, "GoldBar", t, new Vector3(-0.45f + i * 0.45f, 0.2f + (i % 2) * 0.16f, 9.3f),
+                     new Vector3(0.38f, 0.14f, 0.22f), mats.vault);
+            vaultDoor = new GameObject("VaultHinge").transform;
+            vaultDoor.SetParent(t, false);
+            vaultDoor.localPosition = new Vector3(-0.85f, 0.75f, 9.08f);
+            var door = Prim(PrimitiveType.Cube, "VaultDoor", vaultDoor, new Vector3(0.85f, 0, 0), new Vector3(1.7f, 1.4f, 0.12f), mats.vault);
+            Prim(PrimitiveType.Cylinder, "VaultDial", door, new Vector3(0, 0.05f, -0.6f), new Vector3(0.22f, 0.3f, 0.22f), mats.emitter)
                 .localRotation = Quaternion.Euler(90, 0, 0);
 
             // 벽의 조명 띠
@@ -431,6 +510,10 @@ namespace LaserMission
             var p = Vector3.Lerp(prevPos, pos, alpha);
             agentVis.localPosition = p;
             AnimateAgent(alpha < 0.5f ? prevCrouch : crouch);
+
+            bool opening = lastResult == "SUCCESS" && Time.time - lastResultTime < 1.6f;
+            doorOpen = Mathf.MoveTowards(doorOpen, opening ? 1f : 0f, Time.deltaTime * (opening ? 3f : 1.5f));
+            vaultDoor.localRotation = Quaternion.Euler(0, -105f * Mathf.SmoothStep(0, 1, doorOpen), 0);
 
             float t = Mathf.Lerp(prevTime, time, alpha);
             for (int i = 0; i < MaxLasers; i++)

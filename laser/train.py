@@ -26,16 +26,19 @@ from algos import ALGOS, save_policy
 from laser.env import N_ACTIONS, OBS_DIM, LaserEnv
 
 COMMON = {
-    "total_steps": 2_000_000,
+    "total_steps": 4_000_000,
     "n_areas": 16,
     "level": "curriculum",
     "shaping": 0.5,             # 금고 쪽으로 다가간 거리에 주는 보조 보상 (출발→금고 전체 합)
     "time_penalty": 0.01,       # 매 결정(0.1초)마다 빼는 시간 벌점
+    "obs_mode": 1,              # 1: 설계한 레이저 특징, 0: 원시 선분 좌표
+    "build": None,              # Unity 실행 파일 (기본: unity/LaserMission/Build)
     "curriculum_threshold": 0.8,
     "curriculum_window": 300,
     "eval_interval": 100_000,
     "eval_levels": [1, 2, 3, 4],
-    "eval_rounds": 3,           # 레벨마다 (방 수 × rounds)판 평가
+    "eval_rounds": 4,           # 학습 중 평가: 레벨마다 (방 수 × rounds)판
+    "final_rounds": 20,         # 학습 후 최종 평가: 레벨마다 200판 → final.json
     "eval_areas": 10,
     "time_scale": 100.0,
     "latest_interval": 20_000,  # latest.pt 갱신 주기. laser.watch가 학습 중인 모델을 읽어 간다
@@ -95,12 +98,13 @@ def train(algo, seed, overrides, out_dir, worker_id=0):
 
     mode = common["level"]
     level = 0 if mode == "curriculum" else (-1 if mode == "random" else int(mode))
-    env = LaserEnv(n_areas=n, seed=seed, worker_id=worker_id, level=level,
-                   shaping=common["shaping"], time_penalty=common["time_penalty"],
-                   time_scale=common["time_scale"])
+    env_kw = dict(shaping=common["shaping"], time_penalty=common["time_penalty"],
+                  obs_mode=common["obs_mode"], time_scale=common["time_scale"])
+    if common["build"]:
+        env_kw["build"] = common["build"]
+    env = LaserEnv(n_areas=n, seed=seed, worker_id=worker_id, level=level, **env_kw)
     eval_env = LaserEnv(n_areas=common["eval_areas"], seed=seed + 1000, worker_id=worker_id + 1,
-                        level=1, shaping=common["shaping"], time_penalty=common["time_penalty"],
-                   time_scale=common["time_scale"])
+                        level=1, **env_kw)
 
     metrics = open(out_dir / "metrics.csv", "w", newline="", encoding="utf-8")
     writer = None
@@ -162,6 +166,11 @@ def train(algo, seed, overrides, out_dir, worker_id=0):
                     env.set_level(level)
                     print(f"  → 레벨 {level}로 올림 (step {steps:,})", flush=True)
         log()
+        final = evaluate(eval_env, agent.snapshot(ACTION_TABLE, greedy=True),
+                         [0, 1, 2, 3, 4], common["final_rounds"])
+        final["success_mean"] = float(np.mean([final[f"success_l{lv}"] for lv in [1, 2, 3, 4]]))
+        (out_dir / "final.json").write_text(json.dumps(final, indent=2), encoding="utf-8")
+        print("최종 평가: " + " ".join(f"L{lv} {final[f'success_l{lv}']:.2f}" for lv in range(5)), flush=True)
     finally:
         metrics.close()
         env.close()
