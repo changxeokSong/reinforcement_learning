@@ -62,11 +62,13 @@
 | X2 | 학습 방식: 커리큘럼 / 커리큘럼 + 복습(절반은 낮은 레벨) / 레벨 무작위 / 처음부터 레벨 4 (PPO) | 9 |
 | X3 | 관측: 설계한 특징 / 원시 선분 좌표 (PPO) | 3 |
 | X4 | 보상: 시간 벌점 없음 / 보조 보상 없음 (PPO) | 6 |
+| X5 | 학습량: PPO 레벨 무작위 2000만 스텝 | 3 |
+| X6·X7 | SAC 안정화: 기울기 노름 상한 / + Bellman 목표값 범위 제한 | 6 |
 
-모두 400만 스텝, seed 3개(0, 1, 2)다. 커리큘럼은 레벨 0에서 시작해서, 최근 300판 성공률이 0.8을 넘으면 다음 레벨로 올린다. 평가는 학습에 쓰지 않은 seed로 레벨마다 200판(가장 좋은 행동)을 돌린 성공률이다.
+X5를 빼면 모두 400만 스텝, seed 3개(0, 1, 2)다. 커리큘럼은 레벨 0에서 시작해서, 최근 300판 성공률이 0.8을 넘으면 다음 레벨로 올린다. 평가는 학습에 쓰지 않은 seed로 레벨마다 200판(가장 좋은 행동)을 돌린 성공률이다.
 
 ```powershell
-.venv-unity\Scripts\python -m laser.experiments x1 x2 x3 x4 --parallel 8   # 학습
+.venv-unity\Scripts\python -m laser.experiments x1 x2 x3 x4 x5 x6 x7 --parallel 8   # 학습
 python -m laser.report                                                       # 표·그래프 → runs/results/laser/
 ```
 

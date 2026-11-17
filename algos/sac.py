@@ -26,6 +26,7 @@ DEFAULTS = {
     "target_entropy_ratio": 0.3,   # 목표 엔트로피 = ratio × log(행동 수)
     "init_alpha": 0.2,
     "hidden": 256,
+    "target_clip": None,           # Bellman 목표값을 [-x, x]로 자른다 (보상이 유계일 때 Q값 발산 방지)
     "grad_clip": None,             # 기울기 노름 상한 (Q값 발산 방지). None이면 쓰지 않는다 (배구 실험과 같음)
 }
 
@@ -87,6 +88,8 @@ class SAC:
             next_q = torch.min(self.q1_target(next_obs), self.q2_target(next_obs))
             next_v = (next_p * (next_q - alpha * next_logp)).sum(-1)
             target = rew + c["gamma"] * (1.0 - done) * next_v
+            if c["target_clip"]:
+                target = target.clamp(-c["target_clip"], c["target_clip"])
         q1 = self.q1(obs).gather(1, act.unsqueeze(1)).squeeze(1)
         q2 = self.q2(obs).gather(1, act.unsqueeze(1)).squeeze(1)
         q_loss = F.mse_loss(q1, target) + F.mse_loss(q2, target)

@@ -25,12 +25,16 @@ COMPARISONS = {
     "x2_training": ["x1/ppo", "x2/ppo_curmix", "x2/ppo_random", "x2/ppo_level4"],
     "x3_observation": ["x1/ppo", "x3/ppo_rawobs"],
     "x4_reward": ["x1/ppo", "x4/ppo_notimepen", "x4/ppo_noshaping"],
+    "x5_steps": ["x2/ppo_random", "x5/ppo_random_20m"],
+    "x6_sac_stability": ["x1/sac", "x6/sac_clip", "x7/sac_clip2"],
 }
 LABELS = {
     "x1/ppo": "PPO (curriculum)", "x1/dqn": "DQN (curriculum)", "x1/sac": "SAC (curriculum)",
     "x2/ppo_random": "PPO random level", "x2/ppo_curmix": "PPO curriculum + review", "x2/ppo_level4": "PPO level 4 only",
     "x3/ppo_rawobs": "PPO raw observation",
     "x4/ppo_notimepen": "PPO no time penalty", "x4/ppo_noshaping": "PPO no shaping",
+    "x5/ppo_random_20m": "PPO random level 20M",
+    "x6/sac_clip": "SAC + grad clip", "x7/sac_clip2": "SAC + grad clip + target clip",
 }
 LINESTYLES = ["-", "--", ":", "-."]
 

@@ -32,6 +32,8 @@ EXPERIMENTS = {
     "x5": [("ppo_random_20m", "ppo", {"level": "random", "total_steps": 20_000_000})],
     # X6 SAC 안정화: X1에서 seed 1의 Q값이 발산했다 → 기울기 노름 상한
     "x6": [("sac_clip", "sac", {"grad_clip": 10.0})],
+    # X7 X6에서도 레벨이 오를 때 발산 → 목표값도 실제 가능한 범위(보상 합 |G| < 3)로 자른다
+    "x7": [("sac_clip2", "sac", {"grad_clip": 10.0, "target_clip": 3.0})],
 }
 COST = {"ppo": 1, "dqn": 3, "sac": 5}
 
