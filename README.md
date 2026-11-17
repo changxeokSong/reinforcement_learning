@@ -149,7 +149,10 @@ seed 5개의 평균 ± 95% 신뢰구간이다. 자세한 표와 해석은 [실�
 
 ## 학습된 모델
 
-본 실험 후 GitHub Releases에 올리고 링크를 여기에 단다.
+[Releases v1.0](https://github.com/changxeokSong/reinforcement_learning/releases/tag/v1.0)에 있다.
+
+- `models_seed0.zip`: 설정 16개의 seed 0 모델. 풀어서 `python play.py --left models/e5_ppo_12m_seed0/model.pt --right hard`처럼 쓴다.
+- `models_all.zip`: 학습 80회 전체와 리그전 결과. 저장소 폴더에 풀면 `runs/` 아래 원래 경로로 들어가서, 학습 없이 `analysis.report`·`analysis.dashboard`로 그래프를 다시 만들 수 있다.
 
 ## 보고서
 
