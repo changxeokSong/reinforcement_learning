@@ -171,6 +171,10 @@ python -m laser.report                                                      # �
 .venv-unity\Scripts\python -m laser.record <model.pt> --level 3 --out play.gif   # GIF 녹화
 ```
 
+![SAC가 레벨 4를 통과하는 장면](docs/figures/laser_sac_level4.gif)
+
+*학습된 SAC가 레벨 4(무작위 레이저 5개, 1.3배 속도)를 통과하는 장면. 높은 레이저는 슬라이딩, 낮은 레이저는 점프로 피한다.*
+
 결과 (seed 3개, 레벨 1~4 평균 성공률. 자세한 내용은 [실험 결과](docs/results.md#레이저-미션-결과))
 
 | 설정 | 성공률 | 학습 시간 | 비고 |
