@@ -18,6 +18,16 @@ namespace LaserMission
         public float phase;     // 시작 위상
         public float period;    // 깜빡임 주기 (Blinker)
         public float duty;      // 켜져 있는 비율 (Blinker)
+        // 레이저 벽 (레벨 5): 바닥부터 머리 위까지 막는 벽. 좌우로 움직이는 통로 하나만 열려 있다.
+        // 통로 왼쪽 벽(side -1)과 오른쪽 벽(side +1)을 각각 하나의 Bar로 나타낸다.
+        public int side;        // 0이면 보통 레이저, -1/+1이면 벽의 왼쪽/오른쪽 부분
+        public float gapCenter, gapAmp, gapHalf;
+
+        public bool IsWall => side != 0;
+        public const float WallHeight = 0.9f;   // 관측·화면에서 쓰는 벽의 대표 높이 (점프·슬라이딩으로 못 넘는다)
+        public const float WallHalfThickness = 0.06f;
+
+        public float GapX(float t) => gapCenter + gapAmp * Mathf.Sin(omega * t + phase);
 
         public const float Radius = 0.04f;
         public const float RotorHalfLength = 3.2f;
@@ -28,6 +38,13 @@ namespace LaserMission
             float halfW = Room.HalfWidth;
             switch (kind)
             {
+                case LaserKind.Bar when side != 0:
+                {
+                    float g = GapX(t);
+                    a = new Vector3(side < 0 ? -halfW : g + gapHalf, WallHeight, z0);
+                    b = new Vector3(side < 0 ? g - gapHalf : halfW, WallHeight, z0);
+                    break;
+                }
                 case LaserKind.Bar:
                 {
                     float z = z0 + amp * Mathf.Sin(omega * t + phase);

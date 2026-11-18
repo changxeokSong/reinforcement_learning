@@ -31,7 +31,8 @@ COMMON = {
     "level": "curriculum",
     "shaping": 0.5,             # 금고 쪽으로 다가간 거리에 주는 보조 보상 (출발→금고 전체 합)
     "time_penalty": 0.01,       # 매 결정(0.1초)마다 빼는 시간 벌점
-    "level_mix": 0.0,           # 커리큘럼 복습: 이 확률로 지금보다 낮은 레벨을 낸다
+    "level_mix": 0.0,
+    "max_level": 4,             # 커리큘럼의 마지막 레벨, 레벨 무작위의 최대 레벨 (레벨 5를 넣으려면 5)           # 커리큘럼 복습: 이 확률로 지금보다 낮은 레벨을 낸다
     "obs_mode": 1,              # 1: 설계한 레이저 특징, 0: 원시 선분 좌표
     "build": None,              # Unity 실행 파일 (기본: unity/LaserMission/Build)
     "curriculum_threshold": 0.8,
@@ -105,6 +106,7 @@ def train(algo, seed, overrides, out_dir, worker_id=0):
         env_kw["build"] = common["build"]
     env = LaserEnv(n_areas=n, seed=seed, worker_id=worker_id, level=level, **env_kw)
     env.set_param("level_mix", common["level_mix"])
+    env.set_param("max_level", common["max_level"])
     eval_env = LaserEnv(n_areas=common["eval_areas"], seed=seed + 1000, worker_id=worker_id + 1,
                         level=1, **env_kw)
 
@@ -160,7 +162,7 @@ def train(algo, seed, overrides, out_dir, worker_id=0):
                 recent.append((level, kind))
             if len(recent) > 5000:
                 del recent[:2500]
-            if mode == "curriculum" and level < 4:
+            if mode == "curriculum" and level < common["max_level"]:
                 window = [k for lv, k in recent if lv == level][-common["curriculum_window"]:]
                 if len(window) >= common["curriculum_window"] and \
                         window.count("success") / len(window) >= common["curriculum_threshold"]:
@@ -169,10 +171,12 @@ def train(algo, seed, overrides, out_dir, worker_id=0):
                     print(f"  → 레벨 {level}로 올림 (step {steps:,})", flush=True)
         log()
         final = evaluate(eval_env, agent.snapshot(ACTION_TABLE, greedy=True),
-                         [0, 1, 2, 3, 4], common["final_rounds"])
+                         list(range(common["max_level"] + 1)), common["final_rounds"])
         final["success_mean"] = float(np.mean([final[f"success_l{lv}"] for lv in [1, 2, 3, 4]]))
+        final["success_mean_all"] = float(np.mean([final[f"success_l{lv}"]
+                                                   for lv in range(1, common["max_level"] + 1)]))
         (out_dir / "final.json").write_text(json.dumps(final, indent=2), encoding="utf-8")
-        print("최종 평가: " + " ".join(f"L{lv} {final[f'success_l{lv}']:.2f}" for lv in range(5)), flush=True)
+        print("최종 평가: " + " ".join(f"L{lv} {final[f'success_l{lv}']:.2f}" for lv in range(common["max_level"] + 1)), flush=True)
     finally:
         metrics.close()
         env.close()

@@ -27,6 +27,7 @@ COMPARISONS = {
     "x4_reward": ["x1/ppo", "x4/ppo_notimepen", "x4/ppo_noshaping"],
     "x5_steps": ["x2/ppo_random", "x5/ppo_random_20m"],
     "x6_sac_stability": ["x1/sac", "x6/sac_clip", "x7/sac_clip2"],
+    "x8_level5": ["x8/sac_l5", "x8/ppo_l5"],
 }
 LABELS = {
     "x1/ppo": "PPO (curriculum)", "x1/dqn": "DQN (curriculum)", "x1/sac": "SAC (curriculum)",
@@ -35,6 +36,7 @@ LABELS = {
     "x4/ppo_notimepen": "PPO no time penalty", "x4/ppo_noshaping": "PPO no shaping",
     "x5/ppo_random_20m": "PPO random level 20M",
     "x6/sac_clip": "SAC + grad clip", "x7/sac_clip2": "SAC + grad clip + target clip",
+    "x8/sac_l5": "SAC level 1-5 (curriculum)", "x8/ppo_l5": "PPO level 1-5 random 20M",
 }
 LINESTYLES = ["-", "--", ":", "-."]
 
@@ -55,16 +57,21 @@ def load(root):
     return groups
 
 
-def curve(runs, key):
+def curve(runs, key, levels=LEVELS):
     steps = np.array([int(r["step"]) for r in runs[0]["metrics"]])
     n = min(len(r["metrics"]) for r in runs)
-    vals = np.array([[_mean_success(row) if key == "mean" else float(row[key]) for row in r["metrics"][:n]]
+    vals = np.array([[_mean_success(row, levels) if key == "mean" else float(row[key]) for row in r["metrics"][:n]]
                      for r in runs])
     return steps[:n], vals
 
 
-def _mean_success(row):
-    return float(np.mean([float(row[f"success_l{lv}"]) for lv in LEVELS]))
+def _mean_success(row, levels=LEVELS):
+    return float(np.mean([float(row[f"success_l{lv}"]) for lv in levels]))
+
+
+def levels_of(groups, names):
+    """모든 실행이 레벨 5까지 평가했으면 1~5, 아니면 1~4."""
+    return LEVELS + [5] if all("success_l5" in r["final"] for g in names for r in groups[g]) else LEVELS
 
 
 def fmt(values):
@@ -75,12 +82,14 @@ def fmt(values):
 def write_summary(groups, out):
     lines = ["# 레이저 미션 결과", "",
              "학습 후 최종 평가(레벨마다 200판, 가장 좋은 행동)의 성공률. 평균 ± 95% 신뢰구간, 표본 단위는 학습 seed.", "",
-             "| 설정 | seed 수 | 레벨 1 | 레벨 2 | 레벨 3 | 레벨 4 | 평균 (1~4) | 학습 시간(분) |",
-             "|---|---|---|---|---|---|---|---|"]
+             "| 설정 | seed 수 | 레벨 1 | 레벨 2 | 레벨 3 | 레벨 4 | 평균 (1~4) | 레벨 5 | 학습 시간(분) |",
+             "|---|---|---|---|---|---|---|---|---|"]
     for g, runs in sorted(groups.items(), key=lambda kv: -np.mean([r["final"]["success_mean"] for r in kv[1]])):
         cells = [fmt([r["final"][f"success_l{lv}"] for r in runs]) for lv in LEVELS]
         lines.append(f"| {LABELS.get(g, g)} | {len(runs)} | " + " | ".join(cells) +
                      f" | **{fmt([r['final']['success_mean'] for r in runs])}** | "
+                     + (fmt([r["final"]["success_l5"] for r in runs]) if all("success_l5" in r["final"] for r in runs)
+                        else "-") + " | "
                      f"{np.mean([r['minutes'] for r in runs]):.0f} |")
     lines += ["", "## seed별 평균 성공률 (레벨 1~4)", "", "| 설정 | 값 |", "|---|---|"]
     for g, runs in sorted(groups.items()):
@@ -93,6 +102,7 @@ def plot_comparison(groups, names, title, path):
     names = [n for n in names if n in groups]
     if not names:
         return
+    levels = levels_of(groups, names)
     fig, axes = plt.subplots(1, 2, figsize=(13, 4.5))
     used = defaultdict(int)
     for g in names:
@@ -100,12 +110,12 @@ def plot_comparison(groups, names, title, path):
         algo = runs[0]["algo"]
         color, ls = COLORS.get(algo, "#333"), LINESTYLES[used[algo] % 4]
         used[algo] += 1
-        steps, vals = curve(runs, "mean")
+        steps, vals = curve(runs, "mean", levels)
         m, h = mean_ci(vals)
         axes[0].plot(steps / 1e6, m, color=color, ls=ls, lw=2, label=f"{LABELS.get(g, g)} (n={len(runs)})")
         axes[0].fill_between(steps / 1e6, np.clip(m - h, 0, 1), np.clip(m + h, 0, 1), color=color, alpha=0.15)
     axes[0].set_xlabel("training steps (M)")
-    axes[0].set_ylabel("success rate (mean of level 1-4)")
+    axes[0].set_ylabel(f"success rate (mean of level 1-{levels[-1]})")
     axes[0].set_ylim(0, 1)
     axes[0].grid(alpha=0.3)
     axes[0].legend(fontsize=8)
@@ -116,15 +126,15 @@ def plot_comparison(groups, names, title, path):
     for k, g in enumerate(names):
         runs = groups[g]
         algo = runs[0]["algo"]
-        vals = np.array([[r["final"][f"success_l{lv}"] for lv in LEVELS] for r in runs])
+        vals = np.array([[r["final"][f"success_l{lv}"] for lv in levels] for r in runs])
         m, h = mean_ci(vals)
-        x = np.arange(len(LEVELS)) + (k - (len(names) - 1) / 2) * width
+        x = np.arange(len(levels)) + (k - (len(names) - 1) / 2) * width
         axes[1].bar(x, m, width, yerr=h, capsize=3, color=COLORS.get(algo, "#333"),
                     alpha=0.9 - 0.25 * used[algo], edgecolor="black", lw=0.5, label=LABELS.get(g, g))
         used[algo] += 1
-        for j in range(len(LEVELS)):
+        for j in range(len(levels)):
             axes[1].scatter(np.full(len(runs), x[j]), vals[:, j], color="black", s=8, zorder=3)
-    axes[1].set_xticks(range(len(LEVELS)), [f"level {lv}" for lv in LEVELS])
+    axes[1].set_xticks(range(len(levels)), [f"level {lv}" for lv in levels])
     axes[1].set_ylabel("final success rate")
     axes[1].set_ylim(0, 1.05)
     axes[1].grid(alpha=0.3, axis="y")
@@ -138,7 +148,7 @@ def plot_comparison(groups, names, title, path):
 def plot_curriculum(groups, path):
     """커리큘럼 학습에서 학습 레벨이 언제 올라갔는지."""
     fig, ax = plt.subplots(figsize=(7, 4))
-    for g in ["x1/ppo", "x1/dqn", "x1/sac"]:
+    for g in ["x1/ppo", "x1/dqn", "x1/sac", "x8/sac_l5"]:
         for i, r in enumerate(groups.get(g, [])):
             steps = [int(row["step"]) / 1e6 for row in r["metrics"]]
             lv = [int(float(row["train_level"])) for row in r["metrics"]]
@@ -146,7 +156,7 @@ def plot_curriculum(groups, path):
                     label=LABELS[g] if i == 0 else None)
     ax.set_xlabel("training steps (M)")
     ax.set_ylabel("training level")
-    ax.set_yticks(range(5))
+    ax.set_yticks(range(6))
     ax.grid(alpha=0.3)
     ax.legend(fontsize=8)
     ax.set_title("curriculum progress")

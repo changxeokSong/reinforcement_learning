@@ -57,7 +57,7 @@ namespace LaserMission
 
         void Update()
         {
-            for (int k = 0; k <= 4; k++)
+            for (int k = 0; k <= Room.MaxLevel; k++)
                 if (Input.GetKeyDown(KeyCode.Alpha0 + k)) { Room.DefaultLevel = k; RestartAll(); }
             if (Input.GetKeyDown(KeyCode.R)) RestartAll();
             if (Input.GetKeyDown(KeyCode.V)) view = (view + 1) % 4;
@@ -130,7 +130,7 @@ namespace LaserMission
             }
             else
                 GUI.Label(new Rect(16, 36, 900, 30),
-                    "WASD move  SPACE jump  C slide  |  0-4 level  V camera  R restart  M mute", small);
+                    "WASD move  SPACE jump  C slide  |  0-5 level  V camera  R restart  M mute", small);
             if (Time.time - r.lastResultTime < 1.0f)
             {
                 var color = r.lastResult == "SUCCESS" ? new Color(0.3f, 1f, 0.4f) : new Color(1f, 0.3f, 0.3f);

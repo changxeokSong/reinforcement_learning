@@ -32,9 +32,10 @@ namespace LaserMission
         public const int NearestLasers = 5;
         public const int ObsSize = 11 + NearestLasers * 11;
         public const int NumActions = 27;           // 좌우 3 × 앞뒤 3 × (없음/점프/숙이기) 3
-        public const int MaxLasers = 6;
+        public const int MaxLasers = 10;
+        public const int MaxLevel = 5;
 
-        public static int DefaultLevel = 3;         // Python 없이 실행할 때의 레벨 (0~4 키로 바꾼다)
+        public static int DefaultLevel = 3;         // Python 없이 실행할 때의 레벨 (0~5 키로 바꾼다)
 
         // ---- 상태 ----
         public int index;
@@ -67,6 +68,7 @@ namespace LaserMission
         readonly List<Transform> laserVis = new List<Transform>();
         readonly List<Renderer> laserRend = new List<Renderer>();
         readonly List<Transform[]> laserCaps = new List<Transform[]>();
+        readonly List<Transform[]> laserFence = new List<Transform[]>();
         Vector3 prevPos;
         bool prevCrouch;
         float prevTime;
@@ -118,7 +120,8 @@ namespace LaserMission
         {
             var p = Academy.Instance.EnvironmentParameters;
             int lv = Mathf.RoundToInt(p.GetWithDefault("level", DefaultLevel));
-            level = lv < 0 ? 1 + rng.Next(4) : Mathf.Clamp(lv, 0, 4);
+            int maxLevel = Mathf.Clamp(Mathf.RoundToInt(p.GetWithDefault("max_level", 4f)), 1, MaxLevel);
+            level = lv < 0 ? 1 + rng.Next(maxLevel) : Mathf.Clamp(lv, 0, MaxLevel);
             // 커리큘럼 복습: level_mix 확률로 지금보다 낮은 레벨(1 ~ level-1)을 낸다 (앞 레벨을 잊지 않게)
             if (level > 1 && rng.NextDouble() < p.GetWithDefault("level_mix", 0f)) level = 1 + rng.Next(level - 1);
             obsMode = Mathf.RoundToInt(p.GetWithDefault("obs_mode", 1f));
@@ -164,6 +167,31 @@ namespace LaserMission
                     for (int i = 0; i < 4; i++) lasers.Add(Make(kinds[i], slots[i] + Rand(-0.3f, 0.3f), 1f));
                     break;
                 }
+                case 5:
+                {
+                    // 6개 구간: 겹친 레이저 2(막대+좌우 막대), 레이저 벽 2(움직이는 통로), 회전, 깜빡임. 순서는 무작위
+                    var parts = new List<int> { 0, 0, 1, 1, 2, 3 };
+                    Shuffle(parts);
+                    float[] slots = { -6.3f, -3.8f, -1.3f, 1.2f, 3.7f, 6.2f };
+                    for (int i = 0; i < 6; i++)
+                    {
+                        float z = slots[i] + Rand(-0.15f, 0.15f);
+                        switch (parts[i])
+                        {
+                            case 0:   // 높이에 맞춰 점프/슬라이딩하면서, 같은 자리를 쓸고 가는 세로 막대도 피해야 한다
+                                lasers.Add(MakeBar(z, moving: false));
+                                lasers.Add(MakeSweeper(z, 1f));
+                                break;
+                            case 1:
+                                AddWall(z, 1.2f);
+                                break;
+                            default:
+                                lasers.Add(Make(parts[i] == 2 ? LaserKind.Rotor : LaserKind.Blinker, z, 1.4f));
+                                break;
+                        }
+                    }
+                    break;
+                }
                 default:
                 {
                     float[] slots = { -5.5f, -3f, -0.5f, 2f, 4.5f };
@@ -196,6 +224,15 @@ namespace LaserMission
                     return new Laser { kind = LaserKind.Blinker, z0 = z, height = 0.75f,
                         period = Rand(1.5f, 2.5f) / speed, duty = 0.5f, phase = Rand(0f, 1f) };
             }
+        }
+
+        /// <summary>레이저 벽: 폭 1.6m 통로 하나만 열려 있고, 통로가 좌우로 움직인다.</summary>
+        void AddWall(float z, float speed)
+        {
+            float center = Rand(-1f, 1f), amp = Rand(1.2f, 2.2f), omega = Rand(0.7f, 1.2f) * speed, phase = Rand(0f, 6.283f);
+            foreach (int sd in new[] { -1, 1 })
+                lasers.Add(new Laser { kind = LaserKind.Bar, z0 = z, side = sd, gapCenter = center, gapAmp = amp,
+                    gapHalf = 0.8f, omega = omega, phase = phase });
         }
 
         Laser MakeBar(float z, bool moving, float speed = 1f) => new Laser
@@ -312,6 +349,14 @@ namespace LaserMission
             {
                 if (!l.Active(time)) continue;
                 l.Segment(time, out var p, out var q);
+                if (l.IsWall)
+                {
+                    // 벽은 높이와 상관없이 막는다: 바닥 평면에서의 거리로 판정
+                    var f = new Vector3(pos.x, 0f, pos.z);
+                    p.y = 0f; q.y = 0f;
+                    if (Laser.SegmentDistance(f, f, p, q) < AgentRadius + Laser.WallHalfThickness) return true;
+                    continue;
+                }
                 if (Laser.SegmentDistance(a, b, p, q) < AgentRadius + Laser.Radius) return true;
             }
             return false;
@@ -501,6 +546,10 @@ namespace LaserMission
                 laserVis.Add(beam);
                 laserRend.Add(beam.GetComponent<Renderer>());
                 laserCaps.Add(caps);
+                var fence = new Transform[4];
+                for (int k = 0; k < 4; k++)
+                    fence[k] = Prim(PrimitiveType.Cylinder, "Fence", t, Vector3.zero, Vector3.one, mats.laser);
+                laserFence.Add(fence);
             }
         }
 
@@ -538,6 +587,25 @@ namespace LaserMission
                 laserRend[i].sharedMaterial = on ? mats.laser : mats.laserOff;
                 laserCaps[i][0].localPosition = a;
                 laserCaps[i][1].localPosition = b;
+                // 벽이면 위아래로 레이저를 여러 줄 더 그려서 울타리처럼 보이게 한다
+                for (int k = 0; k < 4; k++)
+                {
+                    var fb = laserFence[i][k];
+                    fb.gameObject.SetActive(l.IsWall);
+                    if (!l.IsWall) continue;
+                    float dy = (new[] { -0.7f, -0.35f, 0.45f, 0.9f })[k];
+                    fb.localPosition = mid + Vector3.up * dy;
+                    fb.localRotation = laserVis[i].localRotation;
+                    fb.localScale = new Vector3(0.06f, dir.magnitude / 2f, 0.06f);
+                }
+                if (l.IsWall)
+                {
+                    laserCaps[i][0].localScale = laserCaps[i][1].localScale = new Vector3(0.18f, 2.0f, 0.18f);
+                }
+                else
+                {
+                    laserCaps[i][0].localScale = laserCaps[i][1].localScale = Vector3.one * 0.18f;
+                }
             }
         }
     

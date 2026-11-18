@@ -34,6 +34,11 @@ EXPERIMENTS = {
     "x6": [("sac_clip", "sac", {"grad_clip": 10.0})],
     # X7 X6에서도 레벨이 오를 때 발산 → 목표값도 실제 가능한 범위(보상 합 |G| < 3)로 자른다
     "x7": [("sac_clip2", "sac", {"grad_clip": 10.0, "target_clip": 3.0})],
+    # X8 레벨 5 (겹친 레이저, 움직이는 통로가 있는 레이저 벽, 레이저 10개): 가장 좋았던 두 설정
+    "x8": [("sac_l5", "sac", {"grad_clip": 10.0, "target_clip": 3.0, "max_level": 5,
+                              "eval_levels": [1, 2, 3, 4, 5]}),
+           ("ppo_l5", "ppo", {"level": "random", "max_level": 5, "total_steps": 20_000_000,
+                              "eval_levels": [1, 2, 3, 4, 5]})],
 }
 COST = {"ppo": 1, "dqn": 3, "sac": 5}
 
