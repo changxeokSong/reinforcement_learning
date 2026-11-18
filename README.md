@@ -195,6 +195,11 @@ python -m laser.report                                                      # �
 - `models_seed0.zip`: 설정 16개의 seed 0 모델. 풀어서 `python play.py --left models/e5_ppo_12m_seed0/model.pt --right hard`처럼 쓴다.
 - `models_all.zip`: 학습 80회 전체와 리그전 결과. 저장소 폴더에 풀면 `runs/` 아래 원래 경로로 들어가서, 학습 없이 `analysis.report`·`analysis.dashboard`로 그래프를 다시 만들 수 있다.
 
+레이저 미션은 [Releases v2.0](https://github.com/changxeokSong/reinforcement_learning/releases/tag/v2.0)에 있다.
+
+- `LaserMission_windows.zip`: 바로 해 볼 수 있는 Windows 실행 파일
+- `laser_models.zip`: 학습 33회 전체(`runs/laser/`). 가장 좋은 모델은 `runs/laser/x7/sac_clip2_seed1/model.pt`
+
 ## 보고서
 
 PPT 보고서를 `docs/`에 올리고 링크를 여기에 단다. 구성은 [보고서 구성안](docs/report_outline.md)을 따른다.
