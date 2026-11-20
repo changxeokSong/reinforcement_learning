@@ -111,9 +111,8 @@ def train(algo, seed, overrides, out_dir, worker_id=0, init_policy=None):
                       or any(a >= b for a, b in zip([0, *deadlines], [*deadlines, total]))):
         raise ValueError("curriculum_deadlines must increase from 0 to below total_steps, one per promotion")
     gap_bonus, gap_steps = common["gap_bonus"], common["gap_bonus_steps"]
-    if gap_bonus and (not common["campaign_layouts"] or not common["training_build"]
-                      or not 0 < gap_bonus <= 0.5 or not 0 < gap_steps < total):
-        raise ValueError("A gap curriculum needs campaign layouts, a training build and a valid decay budget")
+    if gap_bonus and (not common["training_build"] or not 0 < gap_bonus <= 0.5 or not 0 < gap_steps < total):
+        raise ValueError("A gap curriculum needs a training build and a valid decay budget")
     agent = ALGOS[algo](OBS_DIM, N_ACTIONS, n, total, algo_cfg, seed=seed)
     if init_policy is not None:
         if algo != "ppo":

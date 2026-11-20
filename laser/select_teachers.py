@@ -13,6 +13,7 @@ import torch
 
 from algos.common import load_policy
 from laser.campaign_eval import evaluation_env
+from laser.env import LaserEnv
 from laser.imitation import load_common
 from laser.train import evaluate
 
@@ -22,26 +23,39 @@ VALIDATION_SEED = 77_000
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
     ap.add_argument("--base", type=Path, required=True)
-    ap.add_argument("--candidates", type=Path, required=True)
+    ap.add_argument("--candidates", type=Path, nargs="+", required=True, help="ppo_level*_seed* 실행이 들어 있는 폴더들")
+    ap.add_argument("--extra", nargs="*", default=[], metavar="LEVEL:MODEL", help="추가 후보 (예: 4:path/to/sac/model.pt)")
+    ap.add_argument("--random-layouts", action="store_true", help="고정 캠페인 배치 대신 판마다 새 무작위 배치로 검증")
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--worker", type=int, default=900)
+    ap.add_argument("--rounds", type=int, default=20, help="레벨마다 rounds × 10판")
     args = ap.parse_args()
     torch.set_num_threads(2)
     base = json.loads(args.base.read_text(encoding="utf-8"))
     models = {int(k): v for k, v in base["models"].items()}
     cands = {}
-    for run in sorted(args.candidates.glob("ppo_level*_seed*")):
-        if (run / "model.pt").exists():
-            lv = int(re.search(r"level(\d+)", run.name).group(1))
-            cands.setdefault(lv, []).append(str(run / "model.pt"))
+    for folder in args.candidates:
+        for run in sorted(folder.glob("ppo_level*_seed*")):
+            if (run / "model.pt").exists():
+                lv = int(re.search(r"level(\d+)", run.name).group(1))
+                cands.setdefault(lv, []).append(str(run / "model.pt"))
+    for item in args.extra:
+        lv, path = item.split(":", 1)
+        cands.setdefault(int(lv), []).append(path)
     common = load_common()
-    env = evaluation_env(common, VALIDATION_SEED, args.worker, areas=10)
+    if args.random_layouts:
+        env = LaserEnv(n_areas=10, seed=VALIDATION_SEED, worker_id=args.worker, level=1, campaign_layouts=False,
+                       build=common["build"], obs_mode=common["obs_mode"], shaping=common["shaping"],
+                       time_penalty=common["time_penalty"], time_scale=common["time_scale"])
+        env.set_param("max_level", 10)
+    else:
+        env = evaluation_env(common, VALIDATION_SEED, args.worker, areas=10)
     validation = {}
     try:
         for lv, paths in sorted(cands.items()):
             rows = []
             for path in [models[lv]] + paths:
-                rate = evaluate(env, load_policy(path), [lv], 20)[f"success_l{lv}"]
+                rate = evaluate(env, load_policy(path), [lv], args.rounds)[f"success_l{lv}"]
                 rows.append({"model": path, "validation_rate": rate})
                 print(f"L{lv} {rate:.3f} {path}", flush=True)
             best = max(rows, key=lambda r: r["validation_rate"])
@@ -50,7 +64,8 @@ def main():
     finally:
         env.close()
     out = {"build": base["build"], "models": {str(k): models[k] for k in sorted(models)},
-           "validation": validation, "validation_seed": VALIDATION_SEED, "base": str(args.base)}
+           "validation": validation, "validation_seed": VALIDATION_SEED, "base": str(args.base),
+           "random_layouts": args.random_layouts}
     args.out.write_text(json.dumps(out, indent=2), encoding="utf-8")
     print(json.dumps(out["models"], indent=1))
 

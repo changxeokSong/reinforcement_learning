@@ -24,7 +24,7 @@ import torch.nn.functional as F
 from algos.common import mlp
 from laser.campaign_eval import EVAL_SEED, LEVELS, evaluate_model, evaluation_env
 from laser.demos import load_demos, replay
-from laser.env import N_ACTIONS, OBS_DIM, TIME_INDEX
+from laser.env import N_ACTIONS, OBS_DIM, TIME_INDEX, LaserEnv
 from laser.ppo_specialists import StagePolicy
 from laser.train import evaluate
 
@@ -59,6 +59,15 @@ def load_common():
             common[key] = True
     common["build"] = json.loads(SPECIALISTS.read_text(encoding="utf-8"))["build"]
     return common
+
+
+def random_env(common, seed, worker, areas):
+    """판마다 새 무작위 배치(캠페인 배치 끔)를 만드는 환경."""
+    env = LaserEnv(n_areas=areas, seed=seed, worker_id=worker, level=1, campaign_layouts=False, build=common["build"],
+                   obs_mode=common["obs_mode"], shaping=common["shaping"], time_penalty=common["time_penalty"],
+                   time_scale=common["time_scale"])
+    env.set_param("max_level", 10)
+    return env
 
 
 def collect(env, teacher, student, level, steps, beta, rng, skip_spawns=()):
@@ -121,6 +130,8 @@ def main():
     ap.add_argument("--demos", nargs="*", default=[], metavar="STAGE:LAYOUT",
                     help="선생님 대신 빔 탐색 시범으로 가르칠 배치 (예: 10:3)")
     ap.add_argument("--demo-repeat", type=int, default=100, help="시범 (상태, 행동) 쌍을 데이터에 몇 번 넣을지")
+    ap.add_argument("--random-layouts", action="store_true",
+                    help="고정 캠페인 배치 대신 판마다 새 무작위 배치에서 데이터를 모으고 평가한다 (일반화)")
     args = ap.parse_args()
 
     tag = "" if args.teachers == SPECIALISTS else "_" + args.teachers.stem.replace("ppo_specialists_", "")
@@ -148,8 +159,12 @@ def main():
         skip.setdefault(stage, []).append(float(first[0]))
         print(f"시범 {item}: {len(states)}개 행동, 재생 결과 {outcome}", flush=True)
 
-    env = evaluation_env(common, 30_000 + args.seed, args.worker, areas=16)
-    check = evaluation_env(common, 40_000 + args.seed, args.worker + 1, areas=10)
+    if args.random_layouts:
+        env = random_env(common, 30_000 + args.seed, args.worker, 16)
+        check = random_env(common, 40_000 + args.seed, args.worker + 1, 10)
+    else:
+        env = evaluation_env(common, 30_000 + args.seed, args.worker, areas=16)
+        check = evaluation_env(common, 40_000 + args.seed, args.worker + 1, areas=10)
     data_x, data_y, log, start = [], [], [], time.time()
     try:
         for it in range(args.iterations):
@@ -179,6 +194,14 @@ def main():
         check.close()
 
     final = evaluate_model(student, common, EVAL_SEED + 100 + args.seed, args.worker + 2)
+    if args.random_layouts:
+        unseen = random_env(common, 123_456, args.worker + 2, 10)     # generalization.py와 같은 평가 seed
+        try:
+            final["unseen_layouts"] = evaluate(unseen, student, LEVELS, 20)
+        finally:
+            unseen.close()
+        u = final["unseen_layouts"]
+        print("처음 보는 배치: " + " ".join(f"L{lv} {u[f'success_l{lv}']:.2f}" for lv in LEVELS), flush=True)
     (out / "final.json").write_text(json.dumps(final, indent=2), encoding="utf-8")
     b = final["by_level"]
     print("최종: " + " ".join(f"L{lv} {b[f'success_l{lv}']:.2f}" for lv in LEVELS)

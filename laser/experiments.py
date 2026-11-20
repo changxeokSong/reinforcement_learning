@@ -62,6 +62,8 @@ EXPERIMENTS = {
                                                                  2_000_000, 4_500_000]})],
     "x11": [("sac_random_campaign", "sac", {**RANDOM_CAMPAIGN, "grad_clip": 10.0, "target_clip": 3.0})],
     "x12": [(f"{algo}_random_campaign", algo, RANDOM_CAMPAIGN) for algo in ("ppo", "dqn")],
+    # X13 같은 예산 비교: 최종 학생의 선생님들에 쓰인 강화학습 합계(5,250만 스텝)를 정책 하나에 모두 준다
+    "x13": [("ppo_random_campaign_52m", "ppo", {**RANDOM_CAMPAIGN, "total_steps": 52_500_000, "eval_interval": 500_000})],
 }
 COST = {"ppo": 1, "dqn": 3, "sac": 5}
 
@@ -127,7 +129,7 @@ def main():
             for seed in args.seeds:
                 out = Path(args.root) / "laser" / exp / f"{name}_seed{seed}"
                 if (out / "model.pt").exists():
-                    if exp in ("x8", "x9", "x10", "x11", "x12"):
+                    if exp in ("x8", "x9", "x10", "x11", "x12", "x13"):
                         config = json.loads((out / "config.json").read_text(encoding="utf-8"))
                         expected_level = overrides["max_level"]
                         if expected_level not in config.get("verified_eval_levels", []):

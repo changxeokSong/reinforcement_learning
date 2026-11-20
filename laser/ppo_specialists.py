@@ -18,8 +18,8 @@ EXTENDED_ATTEMPTS = 10
 class StagePolicy:
     def __init__(self, models):
         self.policies = {int(level): load_policy(path, greedy=True) for level, path in models.items()}
-        if set(self.policies) != set(LEVELS) or any(p.kind != "ppo" for p in self.policies.values()):
-            raise ValueError("Expected one PPO model for each stage")
+        if set(self.policies) != set(LEVELS) or any(p.kind not in ("ppo", "sac") for p in self.policies.values()):
+            raise ValueError("Expected one PPO or SAC model for each stage")
 
     def act(self, obs):
         levels = np.rint(4 * obs[:, LEVEL_INDEX]).astype(int)

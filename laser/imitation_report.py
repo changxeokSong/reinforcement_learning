@@ -95,7 +95,58 @@ def plot_diagnostics():
     plt.close(fig)
 
 
+
+
+def plot_campaign_curves():
+    """(왼쪽) 1~10단계 강화학습 학습 곡선과 무작위 기준선 (오른쪽) 모방 학습 회차별 성공률."""
+    fig, (ax, bx) = plt.subplots(1, 2, figsize=(14, 4.6), gridspec_kw={"width_ratios": [3, 2]})
+    groups = [("SAC", "x11/sac_random_campaign", "#2ca02c"), ("PPO", "x12/ppo_random_campaign", "#d62728"),
+              ("DQN", "x12/dqn_random_campaign", "#7f7f7f"), ("PPO 52.5M (same budget)", "x13/ppo_random_campaign_52m", "#ff7f0e")]
+    for name, group, color in groups:
+        runs = [Path(f"runs/laser/{group}_seed{s}/metrics.csv") for s in range(3)]
+        runs = [r for r in runs if r.exists()]
+        if not runs:
+            continue
+        tables = [list(csv.DictReader(open(r, encoding="utf-8")))[1:] for r in runs]
+        n = min(len(t) for t in tables)
+        steps = np.array([int(r["step"]) for r in tables[0][:n]]) / 1e6
+        vals = np.array([[np.mean([float(row[f"success_l{l}"]) for l in LEVELS]) for row in t[:n]] for t in tables])
+        m, h = mean_ci(vals) if len(vals) > 1 else (vals[0], np.zeros(n))
+        ax.plot(steps, m, color=color, lw=2, label=f"{name} (n={len(vals)})")
+        ax.fill_between(steps, np.clip(m - h, 0, 1), np.clip(m + h, 0, 1), color=color, alpha=0.15)
+    base = json.load(open("runs/results/laser/random_campaign_baseline.json"))
+    rnd = np.mean([[r["by_level"][f"success_l{l}"] for l in LEVELS] for r in base["runs"]])
+    ax.axhline(rnd, color="black", ls=":", lw=1.5, label=f"uniform random policy ({rnd:.0%})")
+    ax.axhline(1.0, color="#17becf", ls="--", lw=1.5, label="imitation student, final (100%)")
+    ax.set_xlabel("environment steps (M)")
+    ax.set_ylabel("success rate, mean of stages 1-10")
+    ax.set_ylim(-0.02, 1.05)
+    ax.grid(alpha=0.3)
+    ax.legend(fontsize=8, loc="center right")
+    ax.set_title("single RL policy on stages 1-10 (mid-training eval, 40 episodes per stage)", fontsize=10)
+
+    for tag, label, color, ls in [("bc", "BC, teachers v1", "#9467bd", "-"), ("dagger", "DAgger, teachers v1", "#9467bd", "--"),
+                                  ("bc_v2", "BC, teachers v2", "#1f77b4", "-"), ("dagger_v2", "DAgger, teachers v2", "#1f77b4", "--"),
+                                  ("bc_v2_demo", "BC, v2 + demo", "#17becf", "-"), ("dagger_v2_demo", "DAgger, v2 + demo", "#17becf", "--")]:
+        logs = [json.load(open(f"runs/laser/imitation/{tag}_seed{s}/log.json")) for s in range(3)]
+        it = [r["iteration"] for r in logs[0]]
+        vals = np.array([[r["success_mean"] for r in lg] for lg in logs])
+        m, h = mean_ci(vals)
+        bx.plot(it, m, color=color, ls=ls, lw=2, marker="o", ms=3, label=label)
+        bx.fill_between(it, np.clip(m - h, 0, 1), np.clip(m + h, 0, 1), color=color, alpha=0.1)
+    bx.set_xlabel("DAgger / BC iteration (64k states added per iteration)")
+    bx.set_ylabel("success rate, mean of stages 1-10")
+    bx.set_ylim(0, 1.05)
+    bx.grid(alpha=0.3)
+    bx.legend(fontsize=7, loc="lower right")
+    bx.set_title("imitation learning progress (3 seeds, 20 episodes per stage)", fontsize=10)
+    fig.tight_layout()
+    fig.savefig(FIG / "laser_campaign_curves.png", dpi=150)
+    plt.close(fig)
+
+
 if __name__ == "__main__":
     plot_success()
     plot_diagnostics()
-    print("저장:", FIG / "laser_imitation.png", FIG / "laser_teacher_diagnostics.png")
+    plot_campaign_curves()
+    print("저장:", FIG / "laser_imitation.png", FIG / "laser_teacher_diagnostics.png", FIG / "laser_campaign_curves.png")

@@ -189,6 +189,17 @@ namespace LaserMission
                     lasers[i] = laser;
                 }
             }
+            else
+            {
+                // 학습 전용: 무작위 배치에서도 통로 넓히기 커리큘럼을 쓸 수 있게 한다 (기본값 0이면 변화 없음, 난수도 쓰지 않음).
+                float gapBonus = Mathf.Clamp(p.GetWithDefault("training_gap_bonus", 0f), 0f, 0.5f);
+                if (gapBonus > 0f)
+                    for (int i = 0; i < lasers.Count; i++)
+                    {
+                        var laser = lasers[i];
+                        if (laser.side != 0) { laser.gapHalf += gapBonus; lasers[i] = laser; }
+                    }
+            }
             rng = practiceRng;
             prevPos = pos;
             prevCrouch = crouch;
