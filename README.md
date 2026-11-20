@@ -257,7 +257,7 @@ GIF는 `python -m laser.record_steps steps` / `full`로 다시 만든다.
 
 ## 보고서
 
-레이저 미션 [발표 보고서 초안](docs/LaserMission_presentation_formulation.pptx)에 X8 최종 결과, 레벨 5 플레이 사례, X9 실험 설계와 [문제 정식화·체크리스트](docs/laser.md#프로젝트-체크리스트)를 담았다. 제출용 표지와 기여 항목에 팀원 3명의 이름·학번 및 담당 작업을 기입한다. 발표 순서는 [보고서 구성안](docs/report_outline.md)을 참고한다.
+레이저 미션 발표 자료는 [docs/LaserMission_presentation.pptx](docs/LaserMission_presentation.pptx)다. 15장으로, 처음 실패부터 정책 하나로 10단계를 완주하기까지를 단계별로 구성했다(`tools/build_presentation.js`로 다시 만든다). 제출 전에 표지와 기여 항목에 팀원 이름·학번과 담당 작업을 넣는다. 배구 쪽 발표 순서는 [보고서 구성안](docs/report_outline.md)을 참고한다.
 
 ## 팀
 
