@@ -6,7 +6,9 @@
 실행: python -m tests.check_algos [--algo ppo dqn sac] [--steps 100000]
 """
 import argparse
+import json
 import time
+from pathlib import Path
 
 import gymnasium as gym
 import numpy as np
@@ -24,7 +26,26 @@ OVERRIDES = {
 }
 
 
-def run(algo, total_steps, seed=0, n_envs=8):
+def check_ppo_diagnostics():
+    # 균등 정책을 고정하면 확률비 1, KL 추정치 0, clip fraction 0이어야 한다.
+    agent = ALGOS["ppo"](4, 2, 2, 8, {"n_steps": 4, "lr": 0, "hidden": 8})
+    with torch.no_grad():
+        for param in agent.params:
+            param.zero_()
+    obs = np.zeros((2, 4), dtype=np.float32)
+    reward = np.ones(2, dtype=np.float32)
+    done = np.zeros(2, dtype=bool)
+    for _ in range(4):
+        action = agent.act_train(obs)
+        diagnostics = agent.observe(obs, action, reward, obs, obs, done, done)
+    np.testing.assert_allclose(diagnostics["entropy"], np.log(2), atol=1e-6)
+    np.testing.assert_allclose(diagnostics["approx_kl"], 0, atol=1e-6)
+    assert diagnostics["clip_fraction"] == 0
+    assert np.isfinite(diagnostics["v_loss"]) and diagnostics["v_loss"] > 0
+    print("PPO 고정 균등 정책: entropy=log(2), KL=0, clip fraction=0")
+
+
+def run(algo, total_steps, seed=0, n_envs=8, diagnostics=None):
     torch.set_num_threads(1)
     torch.manual_seed(seed)
     envs = gym.vector.SyncVectorEnv([lambda: gym.make("CartPole-v1") for _ in range(n_envs)],
@@ -42,7 +63,9 @@ def run(algo, total_steps, seed=0, n_envs=8):
         for i in np.nonzero(term | trunc)[0]:
             final_obs[i] = info["final_obs"][i]
         # 보상을 0.01배로 줄여 배구(±1)와 비슷한 크기로 맞춘다
-        agent.observe(obs, act, (rew * 0.01).astype(np.float32), next_obs, final_obs, term, trunc)
+        stats = agent.observe(obs, act, (rew * 0.01).astype(np.float32), next_obs, final_obs, term, trunc)
+        if diagnostics is not None and algo == "ppo" and stats:
+            diagnostics.append({"algo": algo, "seed": seed, "step": step + n_envs, **stats})
         obs = next_obs
         ep_ret += rew
         for i in np.nonzero(term | trunc)[0]:
@@ -51,7 +74,11 @@ def run(algo, total_steps, seed=0, n_envs=8):
         if len(returns) >= 20:
             best = max(best, float(np.mean(returns[-20:])))
     last = float(np.mean(returns[-20:]))
-    print(f"{algo}: 최근 20판 평균 {last:6.1f}, 학습 중 최고 {best:6.1f}  "
+    envs.close()
+    if diagnostics is not None:
+        diagnostics.append({"algo": algo, "seed": seed, "steps": total_steps,
+                            "last_20_return": last, "best_20_return": best, "passed": best >= 195})
+    print(f"{algo} seed {seed}: 최근 20판 평균 {last:6.1f}, 학습 중 최고 {best:6.1f}  "
           f"({time.time() - start:.0f}초)  {'통과' if best >= 195 else '실패'}")
     return best >= 195
 
@@ -60,6 +87,14 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--algo", nargs="*", default=["ppo", "dqn", "sac"])
     ap.add_argument("--steps", type=int, default=100_000)
+    ap.add_argument("--seeds", type=int, nargs="+", default=[0])
+    ap.add_argument("--diagnostics-out", type=Path, help="PPO 갱신 로그와 각 실행의 최종 검증 요약을 JSON으로 저장")
     args = ap.parse_args()
-    ok = [run(a, args.steps) for a in args.algo]
+    diagnostics = [] if args.diagnostics_out is not None else None
+    if "ppo" in args.algo:
+        check_ppo_diagnostics()
+    ok = [run(a, args.steps, seed=seed, diagnostics=diagnostics) for seed in args.seeds for a in args.algo]
+    if args.diagnostics_out is not None:
+        args.diagnostics_out.parent.mkdir(parents=True, exist_ok=True)
+        args.diagnostics_out.write_text(json.dumps(diagnostics, indent=2, allow_nan=False) + "\n", encoding="utf-8")
     raise SystemExit(0 if all(ok) else 1)

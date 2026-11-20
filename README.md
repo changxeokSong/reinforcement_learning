@@ -163,10 +163,10 @@ py -3.10 -m venv .venv-unity
 실행
 
 ```powershell
-unity\LaserMission\Build\LaserMission.exe                                 # 직접 해 보기 (WASD, Space 점프, C 슬라이딩, 0~4 레벨)
-.venv-unity\Scripts\python -m laser.train --algo ppo --seed 0              # 학습
-.venv-unity\Scripts\python -m laser.watch runs/laser/ppo_seed0             # 학습 중인 AI를 게임 창으로 관전
-.venv-unity\Scripts\python -m laser.experiments x1 x2 x3 x4 --parallel 8   # 실험 전체
+unity\LaserMission\Build\LaserMission.exe                                 # 1~10단계 캠페인 (WASD, Space 점프, C 슬라이딩)
+.venv-unity\Scripts\python -m laser.experiments x11 --parallel 3           # 최신 랜덤 캠페인 1~10단계 새 학습
+.venv-unity\Scripts\python -m laser.watch runs/laser/x11/sac_random_campaign_seed0 --view chase
+.venv\Scripts\python -m laser.report --progress                             # X11 진행 그래프 갱신
 python -m laser.report                                                      # 표·그래프
 .venv-unity\Scripts\python -m laser.record <model.pt> --level 3 --out play.gif   # GIF 녹화
 ```
@@ -175,12 +175,48 @@ python -m laser.report                                                      # �
 
 *학습된 SAC가 레벨 4(무작위 레이저 5개, 1.3배 속도)를 통과하는 장면. 높은 레이저는 슬라이딩, 낮은 레이저는 점프로 피한다.*
 
+실행 파일을 바로 열면 **1~10단계 캠페인**이 시작된다. 각 단계는 고유한 장애물 조합을 바탕으로 출발 위치, 레이저 위치와 움직임이 다른 배치 4개 중 하나를 뽑는다. 성공 후 **Enter**로 다음 단계에 진입한다. 실패 후 **Enter**를 누르거나 **R**로 재도전하면 단계 번호는 그대로이고 직전과 다른 배치가 나온다. 10단계를 완료하면 **MISSION COMPLETE**가 표시되며, **Enter**로 전 단계의 배치를 다시 뽑아 시작한다. **P**로 연습 모드를 전환하며, 연습 모드에서는 **0~9**와 **=**(레벨 10)로 바로 이동한다. 캠페인 진행은 실행 중에 유지된다.
+
+직접 플레이하거나 AI를 관전할 때 **V**로 시점을 순환하고, **F1~F4**로 전체·뒤따르기·측면·정면을 바로 선택한다. **우클릭 드래그**로 회전하고 **휠**로 확대·축소한다. **Home**은 현재 시점의 각도와 확대를 초기화한다. `laser.watch --view chase`처럼 시작 시점을 지정하고, `--levels 1 2 3 4 5 6`으로 에피소드마다 레벨을 순환할 수 있다. 정책의 순차 클리어를 관전하려면 `--campaign`을 사용한다. 이 모드는 성공할 때만 승급한다.
+
+X11은 실제 캠페인과 같은 단계별 네 가지 배치에서 새 SAC 정책을 학습한다. 학습 중에는 `runs/results/laser/x11_progress.png`에서 저장된 스텝과 중간 평가 결과를 볼 수 있다. 명령을 다시 실행하면 그래프가 갱신된다. 학습이 모두 끝나면 같은 폴더에 `x11_random_campaign.png`와 `summary.md`가 생성된다. 이전 학습의 로컬 체크포인트는 휴지통으로 옮겼다. 실험 문서에 남은 이전 숫자와 영상은 당시 환경에서의 기록이다.
+
+X12는 X11과 같은 빌드·환경 설정에서 PPO와 Double DQN을 각각 시드 0·1·2, 1,200만 환경 스텝으로 학습한다. 최종 체크포인트 9개를 같은 평가 조건에서 비교한다. 모델마다 각 레벨 200판의 성공률과 200회의 순차 캠페인 완주율을 구한다. 순차 캠페인은 성공할 때만 다음 단계로 이동하며, 단계마다 시도 3번을 허용한다. 결과 표와 그래프는 `runs/results/laser/campaign_comparison.md`, `campaign_comparison.png`, `campaign_completion.png`에 저장된다.
+
+최종 평가에서는 Unity의 강제 리셋 중 기본 행동이 실행된 판을 준비 판으로 처리하고, 방마다 게임 시간 0에 시작한 다음 판부터 집계한다. X11과 X12의 학습 로그에 저장된 중간 평가는 종전 리셋 동작을 포함한다.
+
+```powershell
+# 새로 X12를 시작할 때 X11에서 사용한 Unity 빌드를 지정한다.
+$build = (Get-Content -Raw runs/laser/x11/sac_random_campaign_seed0/config.json | ConvertFrom-Json).common.build
+.venv-unity\Scripts\python -m laser.experiments x12 --parallel 6 --worker-base 1000 --build $build
+# X11과 X12의 학습이 끝난 뒤 최종 모델 평가와 그래프를 생성한다.
+.venv-unity\Scripts\python -m laser.campaign_eval
+.venv\Scripts\python -m laser.report --campaign
+```
+
+후속 실험에서는 순차 캠페인에서 막힌 단계에 PPO actor를 추가 학습한다. 레벨별 검증에서는 네 배치의 성공률을 같은 비중으로 집계해 각 단계에 사용할 정책을 고른다. 선택이 끝나면 단계당 최대 3회와 10회 시도 조건에서 순차 캠페인을 각각 600회 평가한다. 평가 환경 시드는 검증용과 다르고, 사용할 수 있는 배치는 게임과 같은 네 가지다. 단계별 정책을 골라 쓰는 이 방식은 단일 정책의 X11/X12 비교와 별도 결과다.
+
+```powershell
+.venv-unity\Scripts\python -m laser.ppo_specialists
+.venv\Scripts\python -m laser.report --specialists
+.venv-unity\Scripts\python -m laser.watch runs/results/laser/ppo_specialists.json --campaign --view chase
+```
+
+CUDA가 지원되는 PyTorch를 설치한 환경에서는 아래처럼 SAC 학습에 GPU를 선택할 수 있다. Unity 시뮬레이션과 체크포인트 평가는 CPU에서 실행된다. `--root`와 `--worker-base`를 별도로 지정하면 진행 중인 X11 실행과 결과 폴더 및 통신 포트가 겹치지 않는다.
+
+```powershell
+# CUDA PyTorch를 설치한 가상환경을 활성화한 뒤 실행
+python -m laser.experiments x11 --sac-device cuda --seeds 0 --parallel 1 --root runs/gpu --worker-base 980
+```
+
+레벨 5에서는 같은 SAC 정책으로 두 배치의 [성공 장면(5.3초)](docs/figures/laser_sac_level5_success.gif)과 [충돌 장면(5.1초)](docs/figures/laser_sac_level5_hit.gif)을 녹화했다. 학습 시드는 1이고, 녹화 환경 시드는 각각 0과 11이다.
+
 결과 (seed 3개, 레벨 1~4 평균 성공률. 자세한 내용은 [실험 결과](docs/results.md#레이저-미션-결과))
 
 | 설정 | 성공률 | 학습 시간 | 비고 |
 |---|---|---|---|
 | SAC + 기울기 상한 + 목표값 범위 (400만 스텝) | **0.93** | 180분 | 기본 SAC는 seed 하나가 Q값 발산으로 0. 원인을 찾아 고친 결과 |
-| PPO 레벨 무작위 (2000만 스텝) | 0.87 | 57분 | 같은 시간이면 가장 효율적 |
+| PPO 레벨 무작위 (2000만 스텝) | 0.87 | 57분 | SAC 설정보다 짧게 학습했고 최종 평균 성공률은 낮았음 |
 | PPO 레벨 무작위 (400만 스텝) | 0.66 | 17분 | 커리큘럼(0.53)보다 좋음. 커리큘럼은 앞 레벨을 잊는다 |
 | DQN (400만 스텝) | 0.40 | 105분 | 가장 불안정 |
 
@@ -197,12 +233,12 @@ python -m laser.report                                                      # �
 
 레이저 미션은 [Releases v2.0](https://github.com/changxeokSong/reinforcement_learning/releases/tag/v2.0)에 있다.
 
-- `LaserMission_windows.zip`: 바로 해 볼 수 있는 Windows 실행 파일
+- `LaserMission_windows.zip`: 레벨 0~4를 해 볼 수 있는 Windows 실행 파일. 레벨 5·6은 위의 Unity 빌드 방법을 사용한다.
 - `laser_models.zip`: 학습 33회 전체(`runs/laser/`). 가장 좋은 모델은 `runs/laser/x7/sac_clip2_seed1/model.pt`
 
 ## 보고서
 
-PPT 보고서를 `docs/`에 올리고 링크를 여기에 단다. 구성은 [보고서 구성안](docs/report_outline.md)을 따른다.
+레이저 미션 [발표 보고서 초안](docs/LaserMission_presentation_formulation.pptx)에 X8 최종 결과, 레벨 5 플레이 사례, X9 실험 설계와 [문제 정식화·체크리스트](docs/laser.md#프로젝트-체크리스트)를 담았다. 제출용 표지와 기여 항목에 팀원 3명의 이름·학번 및 담당 작업을 기입한다. 발표 순서는 [보고서 구성안](docs/report_outline.md)을 참고한다.
 
 ## 팀
 

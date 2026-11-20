@@ -32,10 +32,11 @@ namespace LaserMission
         public const int NearestLasers = 5;
         public const int ObsSize = 11 + NearestLasers * 11;
         public const int NumActions = 27;           // 좌우 3 × 앞뒤 3 × (없음/점프/숙이기) 3
-        public const int MaxLasers = 10;
-        public const int MaxLevel = 5;
+        public const int MaxLasers = 12;
+        public const int MaxLevel = 10;
 
-        public static int DefaultLevel = 3;         // Python 없이 실행할 때의 레벨 (0~5 키로 바꾼다)
+        public static int DefaultLevel = 3;
+        public CampaignProgress Campaign { get; set; }
 
         // ---- 상태 ----
         public int index;
@@ -56,6 +57,7 @@ namespace LaserMission
         public float lastResultTime = -10f;
 
         System.Random rng;
+        readonly int[] lastCampaignLayouts = new int[MaxLevel + 1];
         Materials mats;
         LaserAgent agent;
 
@@ -80,13 +82,14 @@ namespace LaserMission
             public GameObject character;     // 알바트로스 3D 모델 (없으면 도형으로 만든 캐릭터)
         }
 
-        public static Room Create(int index, Vector3 origin, Materials mats, int seed)
+        public static Room Create(int index, Vector3 origin, Materials mats, int seed, CampaignProgress campaign = null)
         {
             var go = new GameObject($"Room{index}");
             go.transform.position = origin;
             var room = go.AddComponent<Room>();
             room.index = index;
             room.mats = mats;
+            room.Campaign = campaign;
             room.rng = new System.Random(seed * 1000 + index);
             room.BuildVisuals();
             room.CreateAgent();
@@ -119,11 +122,34 @@ namespace LaserMission
         public void ResetEpisode()
         {
             var p = Academy.Instance.EnvironmentParameters;
-            int lv = Mathf.RoundToInt(p.GetWithDefault("level", DefaultLevel));
-            int maxLevel = Mathf.Clamp(Mathf.RoundToInt(p.GetWithDefault("max_level", 4f)), 1, MaxLevel);
-            level = lv < 0 ? 1 + rng.Next(maxLevel) : Mathf.Clamp(lv, 0, MaxLevel);
-            // 커리큘럼 복습: level_mix 확률로 지금보다 낮은 레벨(1 ~ level-1)을 낸다 (앞 레벨을 잊지 않게)
-            if (level > 1 && rng.NextDouble() < p.GetWithDefault("level_mix", 0f)) level = 1 + rng.Next(level - 1);
+            var practiceRng = rng;
+            int layout = -1;
+            if (Campaign != null)
+            {
+                level = Campaign.Stage;
+                layout = Campaign.LayoutSeed;
+            }
+            else
+            {
+                int lv = Mathf.RoundToInt(p.GetWithDefault("level", DefaultLevel));
+                int maxLevel = Mathf.Clamp(Mathf.RoundToInt(p.GetWithDefault("max_level", 4f)), 1, MaxLevel);
+                level = lv < 0 ? 1 + rng.Next(maxLevel) : Mathf.Clamp(lv, 0, MaxLevel);
+                // level_mix 확률로 현재 레벨보다 낮은 레벨을 복습한다.
+                if (level > 1 && rng.NextDouble() < p.GetWithDefault("level_mix", 0f)
+                    && level >= p.GetWithDefault("level_mix_from", 2f))
+                {
+                    int reviewLevel = Mathf.RoundToInt(p.GetWithDefault("level_mix_target", 0f));
+                    level = reviewLevel > 0 ? Mathf.Min(reviewLevel, level - 1) : 1 + rng.Next(level - 1);
+                }
+                if (level > 0 && p.GetWithDefault("campaign_layouts", 0f) > 0.5f)
+                {
+                    // 0은 이 방에서 아직 이 레벨을 플레이하지 않았음을 나타낸다.
+                    layout = CampaignProgress.DrawLayout(rng, lastCampaignLayouts[level] - 1);
+                    lastCampaignLayouts[level] = layout + 1;
+                }
+            }
+            // 방 번호는 배치 선택에만 영향을 주고, 선택한 배치의 기하는 캠페인과 동일하다.
+            if (layout >= 0) rng = new System.Random(layout * 1000 + level);
             obsMode = Mathf.RoundToInt(p.GetWithDefault("obs_mode", 1f));
             time = 0f;
             pos = new Vector3(Rand(-2.5f, 2.5f), 0f, StartZ);
@@ -132,6 +158,32 @@ namespace LaserMission
             crouch = false;
             slideTimer = 0f;
             GenerateLasers(level);
+            if (layout >= 0)
+            {
+                // 같은 위치의 벽 양쪽을 함께 이동해 통로가 어긋나지 않게 한다.
+                var shifts = new Dictionary<float, float>();
+                float speed = Rand(0.94f, 1.06f);
+                float gapBonus = Mathf.Clamp(p.GetWithDefault("training_gap_bonus", 0f), 0f, 0.5f);
+                for (int i = 0; i < lasers.Count; i++)
+                {
+                    var laser = lasers[i];
+                    if (!shifts.TryGetValue(laser.z0, out float shift))
+                    {
+                        shift = Rand(-0.22f, 0.22f);
+                        shifts.Add(laser.z0, shift);
+                    }
+                    laser.z0 += shift;
+                    laser.omega *= speed;
+                    if (laser.side != 0) laser.gapHalf += gapBonus;
+                    if (laser.kind == LaserKind.Blinker)
+                    {
+                        laser.period /= speed;
+                        laser.phase += Rand(-0.10f, 0.10f);
+                    }
+                    lasers[i] = laser;
+                }
+            }
+            rng = practiceRng;
             prevPos = pos;
             prevCrouch = crouch;
             prevTime = time;
@@ -192,6 +244,81 @@ namespace LaserMission
                     }
                     break;
                 }
+                case 6:
+                {
+                    // 6개 구간, 레이저 12개. 레벨 5보다 여유가 작고, 기다렸다가 움직이는 판단이 필요하다
+                    //  0 이중 벽: 1.1m 간격의 벽 두 개, 통로가 서로 반대로 움직인다 (두 벽 사이에서 기다렸다 옆으로 가야 함)
+                    //  1 좁은 벽: 통로 폭 1.1m (에이전트 폭 0.6m), 빠르게 움직인다
+                    //  2 깜빡이는 벽: 통로 없이 막혔다가 잠깐 꺼진다
+                    //  3 움직이는 겹친 레이저: 앞뒤로 움직이는 막대 + 세로 막대 (2곳)
+                    //  4 빠른 회전 막대
+                    var parts = new List<int> { 0, 1, 2, 3, 3, 4 };
+                    Shuffle(parts);
+                    float[] slots = { -6.6f, -4.1f, -1.6f, 0.9f, 3.4f, 5.9f };
+                    for (int i = 0; i < 6; i++)
+                    {
+                        float z = slots[i] + Rand(-0.1f, 0.1f);
+                        switch (parts[i])
+                        {
+                            case 0:
+                            {
+                                float center = Rand(-0.5f, 0.5f), amp = Rand(1.8f, 2.4f);
+                                float omega = Rand(0.8f, 1.1f), phase = Rand(0f, 6.283f);
+                                AddWall(z - 0.55f, center, amp, omega, phase, gapHalf: 0.75f);
+                                AddWall(z + 0.55f, center, amp, omega, phase + Mathf.PI, gapHalf: 0.75f);
+                                break;
+                            }
+                            case 1:
+                                AddWall(z, Rand(-1f, 1f), Rand(1.5f, 2.3f), Rand(1.1f, 1.5f), Rand(0f, 6.283f), 0.55f);
+                                break;
+                            case 2:
+                                lasers.Add(new Laser { kind = LaserKind.Blinker, z0 = z, fullWidthWall = true, height = Laser.WallHeight,
+                                    period = Rand(1.8f, 2.4f), duty = 0.65f, phase = Rand(0f, 1f) });
+                                break;
+                            case 3:
+                                lasers.Add(MakeBar(z, moving: true, 1.3f));
+                                lasers.Add(MakeSweeper(z, 1.15f));
+                                break;
+                            default:
+                                lasers.Add(Make(LaserKind.Rotor, z, 1.6f));
+                                break;
+                        }
+                    }
+                    break;
+                }
+                case 7:
+                    AddWall(-5.6f, -0.7f, 1.8f, 1.05f, 0f, 0.62f);
+                    AddWall(-2.4f, 0.7f, 1.9f, 1.2f, 1.6f, 0.62f);
+                    lasers.Add(Make(LaserKind.Rotor, 0.7f, 1.25f));
+                    AddWall(4.0f, 0f, 2.4f, 1.2f, 3.2f, 0.58f);
+                    lasers.Add(MakeSweeper(6.4f, 1.3f));
+                    break;
+                case 8:
+                    AddTimedWall(-5.8f, 2.4f, 0.60f, 0.05f);
+                    lasers.Add(MakeBar(-3.3f, moving: false));
+                    AddTimedWall(-0.5f, 2.6f, 0.67f, 0.45f);
+                    AddWall(2.1f, 0f, 2.0f, 1.1f, 2.1f, 0.65f);
+                    AddTimedWall(5.4f, 2.5f, 0.68f, 0.75f);
+                    lasers.Add(MakeSweeper(7.0f, 1.1f));
+                    break;
+                case 9:
+                    AddWall(-5.8f, 0f, 1.9f, 1.0f, 0f, 0.68f);
+                    AddWall(-4.4f, 0f, 1.9f, 1.0f, Mathf.PI, 0.68f);
+                    lasers.Add(MakeBar(-1.5f, moving: true));
+                    lasers.Add(MakeSweeper(0.3f, 1.35f));
+                    AddWall(3.4f, 0.4f, 2.1f, 1.15f, 0.8f, 0.67f);
+                    AddWall(4.8f, 0.4f, 2.1f, 1.15f, 0.8f + Mathf.PI, 0.67f);
+                    AddTimedWall(7.0f, 2.4f, 0.64f, 0.3f);
+                    break;
+                case 10:
+                    AddTimedWall(-6.2f, 2.5f, 0.68f, 0.12f);
+                    AddWall(-3.8f, -0.3f, 2.1f, 1.15f, 0.3f, 0.65f);
+                    AddWall(-2.4f, -0.3f, 2.1f, 1.15f, 0.3f + Mathf.PI, 0.65f);
+                    lasers.Add(Make(LaserKind.Rotor, 0.65f, 1.4f));
+                    lasers.Add(MakeSweeper(2.7f, 1.3f));
+                    AddWall(4.6f, 0.1f, 2.35f, 1.35f, 2.1f, 0.56f);
+                    AddTimedWall(7.0f, 2.6f, 0.72f, 0.57f);
+                    break;
                 default:
                 {
                     float[] slots = { -5.5f, -3f, -0.5f, 2f, 4.5f };
@@ -227,13 +354,19 @@ namespace LaserMission
         }
 
         /// <summary>레이저 벽: 폭 1.6m 통로 하나만 열려 있고, 통로가 좌우로 움직인다.</summary>
-        void AddWall(float z, float speed)
+        void AddWall(float z, float speed) =>
+            AddWall(z, Rand(-1f, 1f), Rand(1.2f, 2.2f), Rand(0.7f, 1.2f) * speed, Rand(0f, 6.283f), 0.8f);
+
+        void AddWall(float z, float center, float amp, float omega, float phase, float gapHalf)
         {
-            float center = Rand(-1f, 1f), amp = Rand(1.2f, 2.2f), omega = Rand(0.7f, 1.2f) * speed, phase = Rand(0f, 6.283f);
             foreach (int sd in new[] { -1, 1 })
                 lasers.Add(new Laser { kind = LaserKind.Bar, z0 = z, side = sd, gapCenter = center, gapAmp = amp,
-                    gapHalf = 0.8f, omega = omega, phase = phase });
+                    gapHalf = gapHalf, omega = omega, phase = phase });
         }
+
+        void AddTimedWall(float z, float period, float duty, float phase) =>
+            lasers.Add(new Laser { kind = LaserKind.Blinker, z0 = z, fullWidthWall = true,
+                height = Laser.WallHeight, period = period, duty = duty, phase = phase });
 
         Laser MakeBar(float z, bool moving, float speed = 1f) => new Laser
         {
@@ -573,7 +706,11 @@ namespace LaserMission
                 laserVis[i].gameObject.SetActive(show);
                 laserCaps[i][0].gameObject.SetActive(show);
                 laserCaps[i][1].gameObject.SetActive(show);
-                if (!show) continue;
+                if (!show)
+                {
+                    foreach (var beam in laserFence[i]) beam.gameObject.SetActive(false);
+                    continue;
+                }
                 var l = lasers[i];
                 l.Segment(t, out var a, out var b);
                 var mid = (a + b) / 2f;
@@ -591,8 +728,8 @@ namespace LaserMission
                 for (int k = 0; k < 4; k++)
                 {
                     var fb = laserFence[i][k];
-                    fb.gameObject.SetActive(l.IsWall);
-                    if (!l.IsWall) continue;
+                    fb.gameObject.SetActive(l.IsWall && on);
+                    if (!l.IsWall || !on) continue;
                     float dy = (new[] { -0.7f, -0.35f, 0.45f, 0.9f })[k];
                     fb.localPosition = mid + Vector3.up * dy;
                     fb.localRotation = laserVis[i].localRotation;

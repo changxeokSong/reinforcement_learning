@@ -109,7 +109,7 @@ class PPO:
         adv, ret = adv.reshape(-1), ret.reshape(-1)
         n = len(obs)
         mb_size = n // c["minibatches"]
-        stats = {}
+        clipped_samples = 0
         for _ in range(c["epochs"]):
             perm = torch.as_tensor(self.rng.permutation(n))
             for start in range(0, n, mb_size):
@@ -117,6 +117,7 @@ class PPO:
                 dist = torch.distributions.Categorical(logits=self.actor(obs[mb]))
                 logp = dist.log_prob(act[mb])
                 ratio = (logp - logp_old[mb]).exp()
+                clipped_samples += ((ratio.detach() - 1).abs() > c["clip"]).sum().item()
                 a = adv[mb]
                 a = (a - a.mean()) / (a.std() + 1e-8)
                 # clipped surrogate objective
@@ -134,6 +135,7 @@ class PPO:
                 "pg_loss": pg_loss.item(), "v_loss": v_loss.item(),
                 "entropy": entropy.item(),
                 "approx_kl": (logp_old[mb] - logp).mean().item(),
+                "clip_fraction": clipped_samples / (n * c["epochs"]),
             }
         return stats
 

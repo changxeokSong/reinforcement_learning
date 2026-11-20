@@ -23,7 +23,8 @@ namespace LaserMission
         public int side;        // 0이면 보통 레이저, -1/+1이면 벽의 왼쪽/오른쪽 부분
         public float gapCenter, gapAmp, gapHalf;
 
-        public bool IsWall => side != 0;
+        public bool fullWidthWall;
+        public bool IsWall => side != 0 || fullWidthWall;
         public const float WallHeight = 0.9f;   // 관측·화면에서 쓰는 벽의 대표 높이 (점프·슬라이딩으로 못 넘는다)
         public const float WallHalfThickness = 0.06f;
 

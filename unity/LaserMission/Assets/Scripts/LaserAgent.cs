@@ -26,12 +26,29 @@ namespace LaserMission
 
         public override void OnActionReceived(ActionBuffers actions)
         {
+            if (room.Campaign != null)
+            {
+                if (room.Campaign.CurrentPhase == CampaignProgress.Phase.Playing)
+                    room.Campaign.Finish(room.Step(actions.DiscreteActions[0], out _));
+                return;
+            }
             int a = actions.DiscreteActions[0];
+            float oldZ = room.pos.z;
             var outcome = room.Step(a, out float progress);
-            float shaping = Academy.Instance.EnvironmentParameters.GetWithDefault("shaping", 0.5f);
-            AddReward(shaping * progress);
+            var parameters = Academy.Instance.EnvironmentParameters;
+            float shaping = parameters.GetWithDefault("shaping", 0.5f);
+            if (parameters.GetWithDefault("potential_shaping", 0f) > 0.5f)
+            {
+                float gamma = parameters.GetWithDefault("shaping_gamma", 0.99f);
+                float nextPotential = outcome == Room.Outcome.None ? DistancePotential(room.pos.z) : 0f;
+                AddReward(shaping * (gamma * nextPotential - DistancePotential(oldZ)));
+            }
+            else
+            {
+                AddReward(shaping * progress);
+            }
             // 시간 벌점: 제자리에서 버티는 비용이 바로 느껴지게 한다 (할인율 때문에 끝의 -1만으로는 부족하다)
-            AddReward(-Academy.Instance.EnvironmentParameters.GetWithDefault("time_penalty", 0.01f));
+            AddReward(-parameters.GetWithDefault("time_penalty", 0.01f));
             switch (outcome)
             {
                 case Room.Outcome.Goal:
@@ -49,6 +66,9 @@ namespace LaserMission
                     break;
             }
         }
+
+        // 금고에서 0, 출발점에서 -1인 정규화 거리.
+        static float DistancePotential(float z) => (z - Room.GoalZ) / (Room.GoalZ - Room.StartZ);
 
         /// <summary>Python 없이 실행하면 키보드로 조작한다. WASD 이동, Space 점프, C/Ctrl 슬라이딩(숙이기).</summary>
         public override void Heuristic(in ActionBuffers actionsOut)

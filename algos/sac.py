@@ -16,6 +16,7 @@ import torch.nn.functional as F
 from .common import FrozenPolicy, ReplayBuffer, mlp
 
 DEFAULTS = {
+    "device": "cpu",
     "lr": 3e-4,
     "gamma": 0.99,
     "buffer_size": 500_000,
@@ -38,12 +39,15 @@ class SAC:
         self.cfg = c = {**DEFAULTS, **cfg}
         self.obs_dim, self.n_actions, self.n_envs = obs_dim, n_actions, n_envs
         self.hidden = c["hidden"]
-        self.actor = mlp(obs_dim, n_actions, c["hidden"])
-        self.q1 = mlp(obs_dim, n_actions, c["hidden"])
-        self.q2 = mlp(obs_dim, n_actions, c["hidden"])
+        self.device = torch.device(c["device"])
+        if self.device.type == "cuda" and not torch.cuda.is_available():
+            raise RuntimeError("SAC requires a CUDA-enabled PyTorch installation for device=cuda")
+        self.actor = mlp(obs_dim, n_actions, c["hidden"]).to(self.device)
+        self.q1 = mlp(obs_dim, n_actions, c["hidden"]).to(self.device)
+        self.q2 = mlp(obs_dim, n_actions, c["hidden"]).to(self.device)
         self.q1_target = copy.deepcopy(self.q1).requires_grad_(False)
         self.q2_target = copy.deepcopy(self.q2).requires_grad_(False)
-        self.log_alpha = torch.tensor(math.log(c["init_alpha"]), requires_grad=True)
+        self.log_alpha = torch.tensor(math.log(c["init_alpha"]), device=self.device, requires_grad=True)
         self.target_entropy = c["target_entropy_ratio"] * math.log(n_actions)
         self.actor_opt = torch.optim.Adam(self.actor.parameters(), lr=c["lr"])
         self.q_opt = torch.optim.Adam(
@@ -58,8 +62,8 @@ class SAC:
     def act_train(self, obs):
         if self.steps < self.cfg["learning_starts"]:
             return self.rng.integers(0, self.n_actions, size=len(obs))
-        logits = self.actor(torch.as_tensor(obs, dtype=torch.float32))
-        return torch.distributions.Categorical(logits=logits).sample().numpy()
+        logits = self.actor(torch.as_tensor(obs, dtype=torch.float32, device=self.device))
+        return torch.distributions.Categorical(logits=logits).sample().cpu().numpy()
 
     def observe(self, obs, act, rew, next_obs, final_obs, terminated, truncated):
         c = self.cfg
@@ -73,12 +77,13 @@ class SAC:
         stats = None
         while self.grad_debt >= 1.0:
             self.grad_debt -= 1.0
-            stats = self._update()
+            stats = self._update(log_stats=self.grad_debt < 1.0)
         return stats
 
-    def _update(self):
+    def _update(self, log_stats=True):
         c = self.cfg
-        obs, act, rew, next_obs, done = self.buffer.sample(c["batch_size"], self.rng)
+        batch = self.buffer.sample(c["batch_size"], self.rng)
+        obs, act, rew, next_obs, done = (tensor.to(self.device) for tensor in batch)
         alpha = self.log_alpha.exp().detach()
 
         # ---- critic: soft Bellman target ----
@@ -122,13 +127,15 @@ class SAC:
             for net, tgt in ((self.q1, self.q1_target), (self.q2, self.q2_target)):
                 for p_, pt in zip(net.parameters(), tgt.parameters()):
                     pt.lerp_(p_, c["tau"])
-        return {"q_loss": q_loss.item(), "actor_loss": actor_loss.item(),
-                "entropy": entropy.item(), "alpha": alpha.item()}
+        if log_stats:
+            values = torch.stack((q_loss.detach(), actor_loss.detach(), entropy, alpha)).tolist()
+            return dict(zip(("q_loss", "actor_loss", "entropy", "alpha"), values))
+        return None
 
     def policy_net(self):
         return self.actor
 
     def snapshot(self, action_table, name="snapshot", greedy=False):
-        net = copy.deepcopy(self.actor).eval()
+        net = copy.deepcopy(self.actor).cpu().eval()
         return FrozenPolicy(net, self.kind, action_table, name, greedy,
                             seed=int(self.rng.integers(1 << 30)))

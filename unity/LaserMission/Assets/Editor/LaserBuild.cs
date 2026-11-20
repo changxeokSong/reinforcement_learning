@@ -86,10 +86,13 @@ public static class LaserBuild
         PlayerSettings.defaultScreenHeight = 720;
         PlayerSettings.resizableWindow = true;
         PlayerSettings.usePlayerLog = true;
+        var args = System.Environment.GetCommandLineArgs();
+        int pathIndex = System.Array.IndexOf(args, "-laser-build-path");
+        string path = pathIndex >= 0 && pathIndex + 1 < args.Length ? args[pathIndex + 1] : "Build/LaserMission.exe";
         var report = BuildPipeline.BuildPlayer(new BuildPlayerOptions
         {
             scenes = new[] { ScenePath },
-            locationPathName = "Build/LaserMission.exe",
+            locationPathName = path,
             target = BuildTarget.StandaloneWindows64,
             options = BuildOptions.None,
         });

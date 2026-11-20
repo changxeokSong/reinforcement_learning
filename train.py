@@ -217,7 +217,7 @@ def _algo_defaults(algo):
 
 
 def _stat_keys(algo):
-    return {"ppo": ["pg_loss", "v_loss", "entropy", "approx_kl"],
+    return {"ppo": ["pg_loss", "v_loss", "entropy", "approx_kl", "clip_fraction"],
             "dqn": ["q_loss", "q_mean", "epsilon"],
             "sac": ["q_loss", "actor_loss", "entropy", "alpha"]}[algo]
 

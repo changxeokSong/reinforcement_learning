@@ -3,19 +3,32 @@
 예)
   .venv-unity\Scripts\python -m laser.experiments x1 x2 x3 x4 --parallel 8
 
-이미 끝난 실행(model.pt가 있는 폴더)은 건너뛴다. 학습은 Build를 복사한 runs/laser_bin/으로 돌리므로,
+이미 끝난 실행(model.pt가 있는 폴더)은 건너뛴다. 학습은 Build를 복사한 runs/laser_bin_*/에서 돌리므로,
 학습 중에도 Unity 프로젝트를 고치고 다시 빌드할 수 있다.
 """
 import argparse
+import hashlib
+import json
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 
 from laser.env import DEFAULT_BUILD
 
 SEEDS = [0, 1, 2]
+RANDOM_CAMPAIGN = {
+    "max_level": 10,
+    "total_steps": 12_000_000,
+    "eval_levels": list(range(1, 11)),
+    "campaign_layouts": True,
+    "level_mix": 0.5,
+    "curriculum_track_actual_level": True,
+    "curriculum_deadlines": [150_000, 400_000, 800_000, 1_250_000, 1_950_000,
+                             3_200_000, 4_300_000, 5_300_000, 6_250_000, 7_200_000],
+}
 EXPERIMENTS = {
     # X1 알고리즘 비교: 커리큘럼 학습
     "x1": [(a, a, {}) for a in ["ppo", "dqn", "sac"]],
@@ -39,21 +52,58 @@ EXPERIMENTS = {
                               "eval_levels": [1, 2, 3, 4, 5]}),
            ("ppo_l5", "ppo", {"level": "random", "max_level": 5, "total_steps": 20_000_000,
                               "eval_levels": [1, 2, 3, 4, 5]})],
+    "x9": [("sac_l5_review", "sac", {"grad_clip": 10.0, "target_clip": 3.0, "max_level": 5,
+                                     "eval_levels": [1, 2, 3, 4, 5],
+                                     "level_mix": 0.25, "level_mix_from": 5, "level_mix_target": 4})],
+    "x10": [("sac_all_levels", "sac", {"grad_clip": 10.0, "target_clip": 3.0, "max_level": 6,
+                                        "total_steps": 8_000_000, "eval_levels": [1, 2, 3, 4, 5, 6],
+                                        "level_mix": 0.5, "curriculum_track_actual_level": True,
+                                        "curriculum_deadlines": [160_000, 450_000, 850_000, 1_250_000,
+                                                                 2_000_000, 4_500_000]})],
+    "x11": [("sac_random_campaign", "sac", {**RANDOM_CAMPAIGN, "grad_clip": 10.0, "target_clip": 3.0})],
+    "x12": [(f"{algo}_random_campaign", algo, RANDOM_CAMPAIGN) for algo in ("ppo", "dqn")],
 }
 COST = {"ppo": 1, "dqn": 3, "sac": 5}
 
 
+def build_digest(folder):
+    """Unity 실행 파일, 관리 어셈블리 및 장면 데이터를 함께 식별한다."""
+    digest = hashlib.sha256()
+    for path in sorted(folder.rglob("*")):
+        relative = path.relative_to(folder)
+        if not path.is_file() or any("DoNotShip" in part for part in relative.parts):
+            continue
+        file_digest = hashlib.sha256()
+        with path.open("rb") as stream:
+            for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                file_digest.update(chunk)
+        digest.update(relative.as_posix().encode("utf-8") + b"\0")
+        digest.update(file_digest.digest())
+    return digest.hexdigest()
+
+
 def prepare_build(root):
-    """학습용으로 실행 파일을 복사한다 (Build보다 오래됐으면 다시 복사)."""
+    """내용이 같은 빌드만 재사용하고 실행 중인 복사본을 덮어쓰지 않는다."""
+    if not DEFAULT_BUILD.is_file():
+        raise FileNotFoundError(DEFAULT_BUILD)
     src = DEFAULT_BUILD.parent
-    # 빌드 시각별로 따로 복사한다: 돌고 있는 학습이 쓰는 실행 파일을 지우지 않게
-    dst = Path(root) / f"laser_bin_{int(DEFAULT_BUILD.stat().st_mtime)}"
-    stamp = dst / "LaserMission.exe"
-    if not stamp.exists() or stamp.stat().st_mtime < DEFAULT_BUILD.stat().st_mtime:
-        shutil.rmtree(dst, ignore_errors=True)
-        shutil.copytree(src, dst, ignore=shutil.ignore_patterns("*DoNotShip*"))
-        shutil.copystat(DEFAULT_BUILD, stamp)
-    return stamp
+    root = Path(root)
+    root.mkdir(parents=True, exist_ok=True)
+    digest = build_digest(src)
+    dst = root / f"laser_bin_{digest}"
+    if not dst.exists():
+        with tempfile.TemporaryDirectory(dir=root) as temp:
+            copied = Path(temp) / "build"
+            shutil.copytree(src, copied, ignore=shutil.ignore_patterns("*DoNotShip*"))
+            if build_digest(copied) != digest:
+                raise RuntimeError("Unity 빌드가 복사 중에 바뀌었습니다. 빌드가 끝난 후 다시 실행하세요.")
+            try:
+                copied.rename(dst)
+            except OSError:
+                if not dst.is_dir():
+                    raise
+                # 다른 실험 프로세스가 같은 빌드의 복사본을 먼저 공개했다.
+    return dst / DEFAULT_BUILD.name
 
 
 def main():
@@ -62,20 +112,34 @@ def main():
     ap.add_argument("--seeds", type=int, nargs="*", default=SEEDS)
     ap.add_argument("--parallel", type=int, default=8)
     ap.add_argument("--steps", type=int, default=None)
+    ap.add_argument("--sac-device", choices=["cpu", "cuda"], help="SAC 신경망을 학습할 장치")
+    ap.add_argument("--build", type=Path, help="이미 보존된 Unity 실행 파일을 사용")
     ap.add_argument("--root", default="runs")
     ap.add_argument("--worker-base", type=int, default=200, help="다른 실험과 동시에 돌릴 때 겹치지 않게")
     args = ap.parse_args()
 
-    build = prepare_build(args.root)
+    build = args.build.resolve() if args.build else prepare_build(args.root)
+    if not build.is_file():
+        ap.error(f"Unity 실행 파일이 없습니다: {build}")
     jobs = []
     for exp in args.experiments:
         for name, algo, overrides in EXPERIMENTS[exp]:
             for seed in args.seeds:
                 out = Path(args.root) / "laser" / exp / f"{name}_seed{seed}"
                 if (out / "model.pt").exists():
+                    if exp in ("x8", "x9", "x10", "x11", "x12"):
+                        config = json.loads((out / "config.json").read_text(encoding="utf-8"))
+                        expected_level = overrides["max_level"]
+                        if expected_level not in config.get("verified_eval_levels", []):
+                            raise SystemExit(
+                                f"레벨 {expected_level} 미검증 결과가 있습니다: {out}. "
+                                "--root로 새 결과 폴더를 지정하세요."
+                            )
                     print(f"건너뜀 (완료됨): {out}")
                     continue
                 settings = {"build": str(build), **overrides}
+                if algo == "sac" and args.sac_device:
+                    settings["device"] = args.sac_device
                 if args.steps:
                     settings["total_steps"] = args.steps
                 jobs.append((COST[algo], out, algo, seed, settings))
@@ -91,7 +155,7 @@ def main():
             out.mkdir(parents=True, exist_ok=True)
             cmd = [sys.executable, "-u", "-m", "laser.train", "--algo", algo, "--seed", str(seed),
                    "--out", str(out), "--worker", str(worker),
-                   "--set"] + [f"{k}={v}" for k, v in settings.items()]
+                   "--set"] + [f"{k}={json.dumps(v)}" for k, v in settings.items()]
             log = open(out / "log.txt", "w", encoding="utf-8")
             running.append((out, subprocess.Popen(cmd, stdout=log, stderr=subprocess.STDOUT), log, worker))
             print(f"시작: {out}", flush=True)
