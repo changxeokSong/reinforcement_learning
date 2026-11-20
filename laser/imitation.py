@@ -27,7 +27,7 @@ from laser.env import N_ACTIONS, OBS_DIM
 from laser.ppo_specialists import StagePolicy
 from laser.train import evaluate
 
-SPECIALISTS = Path("runs/results/laser/ppo_specialists.json")
+SPECIALISTS = Path("runs/results/laser/ppo_specialists.json")   # --teachers로 바꿀 수 있다
 REFERENCE_RUN = Path("runs/laser/x12/ppo_random_campaign_seed0")
 
 
@@ -108,17 +108,19 @@ def main():
     ap.add_argument("--hidden", type=int, default=256)
     ap.add_argument("--worker", type=int, default=700)
     ap.add_argument("--out", type=Path, default=None)
+    ap.add_argument("--teachers", type=Path, default=SPECIALISTS, help="단계별 선생님 목록 (select_teachers 결과)")
     args = ap.parse_args()
 
-    out = args.out or Path("runs/laser/imitation") / f"{args.mode}_seed{args.seed}"
+    tag = "" if args.teachers == SPECIALISTS else "_" + args.teachers.stem.replace("ppo_specialists_", "")
+    out = args.out or Path("runs/laser/imitation") / f"{args.mode}{tag}_seed{args.seed}"
     out.mkdir(parents=True, exist_ok=True)
     rng = np.random.default_rng(args.seed)
     torch.set_num_threads(2)
     common = load_common()
-    teacher = StagePolicy(json.loads(SPECIALISTS.read_text(encoding="utf-8"))["models"])
+    teacher = StagePolicy(json.loads(args.teachers.read_text(encoding="utf-8"))["models"])
     student = Student(args.hidden, args.seed)
     opt = torch.optim.Adam(student.net.parameters(), lr=1e-3)
-    config = {**vars(args), "out": str(out), "common": common}
+    config = {**vars(args), "out": str(out), "teachers": str(args.teachers), "common": common}
     (out / "config.json").write_text(json.dumps(config, indent=2, ensure_ascii=False), encoding="utf-8")
 
     env = evaluation_env(common, 30_000 + args.seed, args.worker, areas=16)
