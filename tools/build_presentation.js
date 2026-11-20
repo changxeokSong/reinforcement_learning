@@ -286,34 +286,70 @@ pres.addSection({ title: "모방 학습" });
     { x: 0.5, y: 4.08, w: 9.0, colW: [3.0, 2.0, 2.0, 2.0], rowH: 0.27, border: { type: "solid", pt: 1, color: "FFFFFF" }, margin: 0.04, valign: "middle" });
 }
 
+// ---------------------------------------------------------------- 13-1. 일반화
+{
+  const s = content("6단계: 처음 보는 배치에서는 외운 것이었다", "모방 학습",
+    "캠페인 배치를 끄면 판마다 레이저 위치·속도·위상이 새로 정해진다. 그 새 배치에서 평가하자 고정 배치에서 100%였던 학생이 21%였다. 단계마다 고정된 배치 4개를 외운 것이다. 경로 탐색으로 확인하니 무작위 배치 300개 중 299개에 통과 경로가 있었으므로, 낮은 성공률은 학습 문제다. 판마다 새 배치로 선생님을 다시 학습하고(4·5단계는 SAC 후보 포함) 학생을 다시 증류하자 처음 보는 배치에서 80%가 되었다. 같은 예산 5,250만 스텝을 준 PPO 정책 하나는 약 28%였다.");
+  const data = [{ name: "처음 보는 배치 평균", labels: ["PPO 정책 하나\n(1,200만)", "PPO 정책 하나\n(5,250만, 같은 예산)", "고정 배치 학생", "무작위 배치\n선생님", "무작위 배치 학생\n(DAgger 512)"], values: [16.8, 27.6, 21.3, 84.0, 80.0] }];
+  s.addChart(pres.charts.BAR, data, { ...chartBase(), x: 0.5, y: 1.05, w: 5.9, h: 3.95, barDir: "col", showLegend: false,
+    chartColors: [HEX.gray, HEX.orange, "A7E3DC", HEX.blue, HEX.teal], varyColors: true,
+    showValue: true, dataLabelPosition: "outEnd", dataLabelFormatCode: "0.0\"%\"", dataLabelFontSize: 11, dataLabelColor: "1B1B2A", dataLabelFontFace: "+mn-lt", catAxisLabelFontSize: 9 });
+  card(s, 6.65, 1.1, 2.85, 1.7, "FCE8E8", "memorize card");
+  txt(s, "외운 배치 100% → 새 배치 21%", { x: 6.8, y: 1.22, w: 2.6, h: 0.35, fontSize: 12, bold: true, color: C.accent1 });
+  txt(s, "단계마다 배치 4개로만 배우면 배치를 외운다", { x: 6.8, y: 1.6, w: 2.6, h: 1.1, fontSize: 11 });
+  card(s, 6.65, 3.0, 2.85, 1.95, "E3F6F4", "solvable card");
+  txt(s, "299 / 300 통과 가능", { x: 6.8, y: 3.12, w: 2.6, h: 0.35, fontSize: 13, bold: true, color: C.accent2 });
+  txt(s, "무작위 배치를 경로 탐색으로 확인. 판마다 새 배치로 다시 학습하자 학생 21% → 80%", { x: 6.8, y: 3.5, w: 2.6, h: 1.35, fontSize: 11 });
+}
+
+// ---------------------------------------------------------------- 13-2. DAgger vs BC
+{
+  const s = content("7단계: DAgger가 BC보다 나은 조건", "모방 학습",
+    "고정 배치에서는 학생이 선생님을 99.99% 따라 해서 BC와 DAgger가 같았다. 새 배치에서는 학생이 실수하고, 작은 학생일수록 실수가 많다. 이때 학생이 실제로 간 상태에서 정답을 모으는 DAgger가 BC보다 낫다. 작은 학생에서 11.5%p 차이이고 신뢰구간이 겹치지 않는다. 또 5단계 선생님을 더 강한 SAC(95%)로 바꾸자 학생은 오히려 78%에서 63%로 떨어졌다. SAC 선생님 단계의 행동 일치율이 71~93%로 PPO 선생님(93~99%)보다 낮았다. 최대 엔트로피 학습이라 여러 행동의 점수가 비슷해 정답이 흔들리기 때문으로 본다.");
+  const data = [
+    { name: "BC", labels: ["학생 64", "학생 256"], values: [48.9, 68.5] },
+    { name: "DAgger", labels: ["학생 64", "학생 256"], values: [60.4, 71.2] },
+  ];
+  s.addChart(pres.charts.BAR, data, { ...chartBase(), x: 0.5, y: 1.05, w: 4.6, h: 3.95, barDir: "col", chartColors: [HEX.gray, HEX.blue],
+    showValue: true, dataLabelPosition: "outEnd", dataLabelFormatCode: "0.0\"%\"", dataLabelFontSize: 11, dataLabelColor: "1B1B2A", dataLabelFontFace: "+mn-lt" });
+  card(s, 5.35, 1.1, 4.15, 1.75, HEX.light, "dagger card");
+  txt(s, "학생이 실수할 때 DAgger가 효과", { x: 5.55, y: 1.22, w: 3.8, h: 0.35, fontSize: 13, bold: true, color: C.accent3 });
+  txt(s, "작은 학생: BC 48.9% → DAgger 60.4% (신뢰구간 겹치지 않음). 고정 배치(ε≈0)에서는 차이 없음", { x: 5.55, y: 1.6, w: 3.8, h: 1.15, fontSize: 11 });
+  card(s, 5.35, 3.05, 4.15, 1.9, "FDF1E6", "imitability card");
+  txt(s, "선생님은 따라 하기 쉬워야 한다", { x: 5.55, y: 3.17, w: 3.8, h: 0.35, fontSize: 13, bold: true, color: C.accent4 });
+  txt(s, "5단계 선생님 PPO 80% → SAC 95%로 바꾸자 학생 5단계 78% → 63%. 행동 일치율: PPO 단계 93~99%, SAC 단계 71~93%", { x: 5.55, y: 3.55, w: 3.8, h: 1.3, fontSize: 11 });
+}
+
 // ---------------------------------------------------------------- 14. 배운 점
 pres.addSection({ title: "정리" });
 {
   const s = pres.addSlide({ masterName: "DARK", sectionTitle: "정리" });
   s.addText("배운 점", { placeholder: "title" });
-  s.addNotes("네 가지를 정리한다. 비교 기준, 망각, 희소 보상, 그리고 여러 seed로 다시 확인하기. 모두 수업에서 배운 개념을 우리 환경에서 직접 확인한 것이다.");
+  s.addNotes("여섯 가지를 정리한다. 비교 기준, 망각, 희소 보상, 고정 배치 암기와 일반화, DAgger가 필요한 조건, 여러 seed로 다시 확인하기. 모두 수업에서 배운 개념을 우리 환경에서 직접 확인한 것이다.");
   const items = [
-    ["비교 기준이 결론을 바꾼다", "같은 스텝이면 SAC, 같은 시간이면 PPO. 예산을 맞춰 비교하고 기준을 밝힌다 (10장)", HEX.blue],
-    ["정책 하나는 여러 단계를 잊는다", "단계별 PPO 전문가를 모방 학습으로 하나에 합쳐 망각을 피했다 (11장)", HEX.purple],
-    ["성공을 못 보면 배울 수 없다", "희소 보상으로 PPO가 0%인 배치는 시범 하나로 100%가 됐다 (10·11장)", HEX.teal],
-    ["한 번의 개선은 다시 확인한다", "seed 1개로 본 개선은 seed 3개에서 대부분 사라졌다. 신뢰구간으로 판단 (10장)", HEX.orange],
+    ["비교 기준이 결론을 바꾼다", "같은 스텝이면 SAC, 같은 시간이면 PPO. 같은 예산을 줘도 정책 하나는 seed 1개만 완주 (10장)", HEX.blue],
+    ["정책 하나는 여러 단계를 잊는다", "단계별 전문가를 모방 학습으로 하나에 합쳐 망각을 피했다 (11장)", HEX.purple],
+    ["성공을 못 보면 배울 수 없다", "희소 보상으로 PPO 0%인 배치를 시범 하나로 100% (10·11장)", HEX.teal],
+    ["고정 배치로만 배우면 외운다", "처음 보는 배치에서 21%. 판마다 새 배치로 학습해 80% (평가 분리)", HEX.red],
+    ["DAgger는 학생이 실수할 때 필요", "작은 학생에서 DAgger가 BC보다 11.5%p 높음. ε≈0이면 차이 없음 (11장)", HEX.orange],
+    ["한 번의 개선은 다시 확인한다", "seed 1개로 본 개선은 seed 3개에서 대부분 사라짐. 신뢰구간으로 판단 (10장)", "8D99AE"],
   ];
   items.forEach(([h, b, color], i) => {
-    const x = 0.5 + (i % 2) * 4.6, y = 1.35 + Math.floor(i / 2) * 1.85;
-    s.addShape(pres.shapes.ROUNDED_RECTANGLE, { x, y, w: 4.4, h: 1.65, rectRadius: 0.08, fill: { color: "1B2B40" }, line: { color: "1B2B40" }, objectName: "lesson " + (i + 1) });
-    stepBadge(s, String(i + 1), x + 0.2, y + 0.2, color);
-    txt(s, h, { x: x + 0.78, y: y + 0.2, w: 3.45, h: 0.45, fontSize: 15, bold: true, color: C.background1, valign: "middle" });
-    txt(s, b, { x: x + 0.2, y: y + 0.78, w: 4.0, h: 0.8, fontSize: 12, color: "CADCFC" });
+    const x = 0.5 + (i % 3) * 3.05, y = 1.25 + Math.floor(i / 3) * 1.95;
+    s.addShape(pres.shapes.ROUNDED_RECTANGLE, { x, y, w: 2.9, h: 1.8, rectRadius: 0.08, fill: { color: "1B2B40" }, line: { color: "1B2B40" }, objectName: "lesson " + (i + 1) });
+    stepBadge(s, String(i + 1), x + 0.15, y + 0.15, color);
+    txt(s, h, { x: x + 0.7, y: y + 0.12, w: 2.1, h: 0.5, fontSize: 13, bold: true, color: C.background1, valign: "middle" });
+    txt(s, b, { x: x + 0.15, y: y + 0.75, w: 2.6, h: 1.0, fontSize: 11, color: "CADCFC" });
   });
 }
 
 // ---------------------------------------------------------------- 15. 한계
 {
   const s = content("한계와 다음 단계", "정리",
-    "시범은 시뮬레이터의 모든 상태를 아는 탐색으로 만들었기 때문에, 되감을 수 없는 실제 환경에서는 사람의 시범이 필요하다. 단계마다 배치가 4개뿐이라 처음 보는 배치에 대한 일반화는 확인하지 않았다. 다음 단계로는 배치를 무작위로 많이 만들어 일반화를 평가하고, 학생을 강화학습으로 다시 미세 조정하는 것을 생각할 수 있다.");
+    "6단계는 모든 방법을 써도 처음 보는 배치에서 약 20%에 머물렀다. 또 고정 배치를 완벽히 깨는 학생과 새 배치에서 잘하는 학생이 서로 다르다. 다음으로는 모방 후 강화학습 미세 조정, SAC 선생님의 확률 분포 전체를 따라 하는 증류, 두 종류 배치를 함께 학습하는 방법을 생각할 수 있다.");
   const cols = [
-    ["한계", HEX.red, ["시범은 시뮬레이터 상태를 모두 아는 탐색으로 만듦. 실제 환경이라면 사람 시범이 필요", "단계마다 배치 4개뿐. 처음 보는 배치에서의 일반화는 미확인", "BC와 DAgger 차이가 드러나지 않음 (ε≈0)"]],
-    ["다음 단계", HEX.teal, ["배치를 무작위로 많이 만들어 일반화 평가", "관측을 줄여(시야 제한) 분포 이동이 생기는 조건에서 BC vs DAgger 비교", "학생을 PPO로 미세 조정해 시범 없는 배치도 풀기"]],
+    ["한계", HEX.red, ["6단계는 처음 보는 배치에서 약 20% (통과 경로는 29/30 존재)", "고정 배치 완주와 새 배치 일반화를 정책 하나로 동시에 달성하지 못함", "시범은 시뮬레이터 상태를 아는 탐색으로 만듦. 실제 환경이라면 사람 시범 필요"]],
+    ["다음 단계", HEX.teal, ["6단계: 학생을 PPO로 미세 조정 (모방 후 강화학습)", "SAC 선생님은 행동 확률 전체를 따라 하도록 증류", "고정·무작위 배치를 함께 학습한 학생 하나"]],
   ];
   cols.forEach(([h, color, lines], i) => {
     const x = 0.5 + i * 4.6;
