@@ -144,7 +144,13 @@ namespace LaserMission
                 if (level > 0 && p.GetWithDefault("campaign_layouts", 0f) > 0.5f)
                 {
                     // 0은 이 방에서 아직 이 레벨을 플레이하지 않았음을 나타낸다.
-                    layout = CampaignProgress.DrawLayout(rng, lastCampaignLayouts[level] - 1);
+                    // 학습 전용: training_layout(0~3)을 training_layout_prob 확률로 고정한다 (어려운 배치 집중 학습).
+                    // 기본값(-1)이면 아래 무작위 선택과 난수 사용 순서가 이전과 같다.
+                    int forced = Mathf.RoundToInt(p.GetWithDefault("training_layout", -1f));
+                    if (forced >= 0 && rng.NextDouble() < p.GetWithDefault("training_layout_prob", 1f))
+                        layout = forced;
+                    else
+                        layout = CampaignProgress.DrawLayout(rng, lastCampaignLayouts[level] - 1);
                     lastCampaignLayouts[level] = layout + 1;
                 }
             }

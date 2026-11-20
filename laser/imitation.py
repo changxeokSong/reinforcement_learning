@@ -23,7 +23,8 @@ import torch.nn.functional as F
 
 from algos.common import mlp
 from laser.campaign_eval import EVAL_SEED, LEVELS, evaluate_model, evaluation_env
-from laser.env import N_ACTIONS, OBS_DIM
+from laser.demos import load_demos, replay
+from laser.env import N_ACTIONS, OBS_DIM, TIME_INDEX
 from laser.ppo_specialists import StagePolicy
 from laser.train import evaluate
 
@@ -60,17 +61,25 @@ def load_common():
     return common
 
 
-def collect(env, teacher, student, level, steps, beta, rng):
+def collect(env, teacher, student, level, steps, beta, rng, skip_spawns=()):
     """한 단계에서 steps번 결정하며 (상태, 선생님 행동)을 모은다.
-    방마다 이번 에피소드를 선생님이 플레이할 확률이 beta다 (BC는 항상 1, DAgger는 1회차만 1)."""
+    방마다 이번 에피소드를 선생님이 플레이할 확률이 beta다 (BC는 항상 1, DAgger는 1회차만 1).
+    skip_spawns: 시범으로 대신 가르치는 배치의 출발 위치(관측 0번). 그 판은 선생님 정답을 쓰지 않는다
+    (선생님이 늘 실패하는 배치라서, 같은 상태에 시범과 다른 정답이 붙으면 둘이 섞인다)."""
     env.set_level(level)
     obs = env.reset()
     by_teacher = rng.random(env.n) < beta
+    skip = np.zeros(env.n, dtype=bool)
+    if skip_spawns:
+        skip[:] = obs[:, TIME_INDEX] != 0      # 강제 리셋 직후의 준비 판은 배치를 알 수 없으므로 쓰지 않는다
     states, labels, finished = [], [], 0
     for _ in range(steps):
+        fresh = obs[:, TIME_INDEX] == 0
+        if skip_spawns:
+            skip[fresh] = np.any(np.abs(obs[fresh, 0][:, None] - np.array(skip_spawns)[None]) < 2e-3, axis=1)
         expert = teacher.act(obs)
-        states.append(obs.copy())
-        labels.append(expert)
+        states.append(obs[~skip].copy())
+        labels.append(expert[~skip])
         actions = np.where(by_teacher, expert, student.act(obs))
         result = env.step(actions)
         obs = result["obs"]
@@ -109,9 +118,13 @@ def main():
     ap.add_argument("--worker", type=int, default=700)
     ap.add_argument("--out", type=Path, default=None)
     ap.add_argument("--teachers", type=Path, default=SPECIALISTS, help="단계별 선생님 목록 (select_teachers 결과)")
+    ap.add_argument("--demos", nargs="*", default=[], metavar="STAGE:LAYOUT",
+                    help="선생님 대신 빔 탐색 시범으로 가르칠 배치 (예: 10:3)")
+    ap.add_argument("--demo-repeat", type=int, default=100, help="시범 (상태, 행동) 쌍을 데이터에 몇 번 넣을지")
     args = ap.parse_args()
 
     tag = "" if args.teachers == SPECIALISTS else "_" + args.teachers.stem.replace("ppo_specialists_", "")
+    tag += "_demo" if args.demos else ""
     out = args.out or Path("runs/laser/imitation") / f"{args.mode}{tag}_seed{args.seed}"
     out.mkdir(parents=True, exist_ok=True)
     rng = np.random.default_rng(args.seed)
@@ -123,6 +136,18 @@ def main():
     config = {**vars(args), "out": str(out), "teachers": str(args.teachers), "common": common}
     (out / "config.json").write_text(json.dumps(config, indent=2, ensure_ascii=False), encoding="utf-8")
 
+    demo_x, demo_y, skip = [], [], {}
+    all_demos = load_demos()
+    for item in args.demos:
+        stage, layout = map(int, item.split(":"))
+        states, outcome, first = replay(common, stage, layout, all_demos[(stage, layout)], args.worker + 3)
+        if outcome != "success":
+            raise RuntimeError(f"Demo {item} did not clear the stage when replayed ({outcome})")
+        demo_x.append(np.repeat(states, args.demo_repeat, axis=0))
+        demo_y.append(np.repeat(np.array(all_demos[(stage, layout)][:len(states)]), args.demo_repeat))
+        skip.setdefault(stage, []).append(float(first[0]))
+        print(f"시범 {item}: {len(states)}개 행동, 재생 결과 {outcome}", flush=True)
+
     env = evaluation_env(common, 30_000 + args.seed, args.worker, areas=16)
     check = evaluation_env(common, 40_000 + args.seed, args.worker + 1, areas=10)
     data_x, data_y, log, start = [], [], [], time.time()
@@ -131,11 +156,11 @@ def main():
             beta = 1.0 if (args.mode == "bc" or it == 0) else 0.0
             episodes = 0
             for level in LEVELS:
-                x, y, n = collect(env, teacher, student, level, args.steps_per_level, beta, rng)
+                x, y, n = collect(env, teacher, student, level, args.steps_per_level, beta, rng, skip.get(level, ()))
                 data_x.append(x)
                 data_y.append(y)
                 episodes += n
-            states, labels = np.concatenate(data_x), np.concatenate(data_y)
+            states, labels = np.concatenate(data_x + demo_x), np.concatenate(data_y + demo_y)
             loss, acc = train_student(student, opt, states, labels, args.epochs, 2048, rng)
             student.steps = len(states)
             scores = evaluate(check, student, LEVELS, 2)

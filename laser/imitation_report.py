@@ -36,24 +36,33 @@ def plot_success():
     groups = [("SAC (single RL policy)", *single_rl("sac"), "#2ca02c"),
               ("PPO (single RL policy)", *single_rl("ppo"), "#d62728"),
               ("student, teachers v1 (BC)", *student("bc"), "#9467bd"),
-              ("student, teachers v2 (BC)", *student("bc_v2"), "#1f77b4")]
+              ("student, teachers v2 (BC)", *student("bc_v2"), "#1f77b4"),
+              ("student, v2 + stage-10 demo (BC)", *student("bc_v2_demo"), "#17becf")]
     fig, (ax, bx) = plt.subplots(1, 2, figsize=(14, 4.6), gridspec_kw={"width_ratios": [3, 1]})
     w = 0.8 / len(groups)
     for k, (name, S, comp, c) in enumerate(groups):
         m, h = mean_ci(S)
         x = np.arange(len(LEVELS)) + (k - (len(groups) - 1) / 2) * w
         ax.bar(x, m, w, yerr=h, capsize=2, color=c, edgecolor="black", lw=0.4, label=name)
-        bx.bar(k, comp, color=c, edgecolor="black", lw=0.4)
-        bx.text(k, comp + 0.02, f"{comp:.0%}", ha="center", fontsize=9)
+        bx.bar(k - (0.15 if k >= 3 else 0), comp, 0.35 if k >= 3 else 0.7, color=c, edgecolor="black", lw=0.4)
+        bx.text(k - (0.15 if k >= 3 else 0), comp + 0.02, f"{comp:.0%}", ha="center", fontsize=8)
     ax.set_xticks(range(len(LEVELS)), [f"L{l}" for l in LEVELS])
     ax.set_ylim(0, 1.08)
     ax.set_ylabel("success rate (200 episodes per level, mean ± 95% CI over 3 seeds)")
     ax.legend(fontsize=8, loc="lower left")
     ax.grid(alpha=0.3, axis="y")
     ax.set_title("one policy for all 10 stages")
-    bx.set_xticks(range(len(groups)), ["SAC", "PPO", "student\nv1", "student\nv2"])
-    bx.set_ylim(0, 1.1)
-    bx.set_title("10-stage campaign completed\n(3 tries per stage, 600 runs)")
+    one_try = json.load(open("runs/results/laser/imitation_one_try_campaign.json"))
+    for k, tag in [(3, "bc_v2"), (4, "bc_v2_demo")]:
+        runs = [one_try[f"{tag}_seed{s}"] for s in range(3)]
+        rate = sum(r["completed"] for r in runs) / sum(r["campaigns"] for r in runs)
+        bx.bar(k + 0.2, rate, 0.35, color="white", edgecolor="black", hatch="//", lw=0.6,
+               label="1 try per stage" if k == 3 else None)
+        bx.text(k + 0.2, rate + 0.02, f"{rate:.0%}", ha="center", fontsize=8)
+    bx.legend(fontsize=7, loc="upper left")
+    bx.set_xticks(range(len(groups)), ["SAC", "PPO", "v1", "v2", "v2+demo"], fontsize=9)
+    bx.set_ylim(0, 1.15)
+    bx.set_title("10-stage campaign completed\n(solid: 3 tries per stage, hatched: 1 try)", fontsize=10)
     bx.grid(alpha=0.3, axis="y")
     fig.tight_layout()
     fig.savefig(FIG / "laser_imitation.png", dpi=150)

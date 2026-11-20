@@ -42,6 +42,8 @@ COMMON = {
     "training_build": None,     # 학습 전용 빌드를 쓸 때 평가 빌드는 build로 지정
     "gap_bonus": 0.0,
     "gap_bonus_steps": 0,
+    "training_layout": -1,      # 학습 전용 빌드: 이 배치(0~3)를 training_layout_prob 확률로 고정 (어려운 배치 집중)
+    "training_layout_prob": 0.5,
     "curriculum_threshold": 0.8,
     "curriculum_window": 300,
     "curriculum_track_actual_level": False,
@@ -142,6 +144,11 @@ def train(algo, seed, overrides, out_dir, worker_id=0, init_policy=None):
     env = LaserEnv(n_areas=n, seed=seed, worker_id=worker_id, level=level, **train_kw)
     if gap_bonus:
         env.set_param("training_gap_bonus", gap_bonus)
+    if common["training_layout"] >= 0:
+        if not common["campaign_layouts"] or not common["training_build"]:
+            raise ValueError("training_layout needs campaign layouts and a training build")
+        env.set_param("training_layout", common["training_layout"])
+        env.set_param("training_layout_prob", common["training_layout_prob"])
     env.set_param("level_mix", common["level_mix"])
     env.set_param("level_mix_from", common["level_mix_from"])
     env.set_param("level_mix_target", common["level_mix_target"])
