@@ -224,6 +224,12 @@ python -m laser.experiments x11 --sac-device cuda --seeds 0 --parallel 1 --root 
 
 ![imitation](docs/figures/laser_imitation.png)
 
+| 같은 배치(10단계 배치 3)를 단계별 정책이 차례로 플레이 | 최종 학생 정책 하나가 1~10단계를 연속 통과 |
+|---|---|
+| ![단계별](docs/figures/laser_steps.gif) | ![10단계 완주](docs/figures/laser_campaign.gif) |
+
+GIF는 `python -m laser.record_steps steps` / `full`로 다시 만든다.
+
 1~4단계 초기 실험 결과 (seed 3개, 레벨 1~4 평균 성공률. 자세한 내용은 [실험 결과](docs/results.md#레이저-미션-결과))
 
 | 설정 | 성공률 | 학습 시간 | 비고 |
