@@ -27,3 +27,4 @@ Thumbs.db
 game_files/
 save_backups/
 .venv-unity/
+laser/data/random_demos_*.csv

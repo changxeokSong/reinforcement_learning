@@ -12,6 +12,7 @@
   .venv-unity\\Scripts\\python -m laser.imitation --mode dagger --seed 0
 """
 import argparse
+import csv
 import json
 import time
 from pathlib import Path
@@ -130,6 +131,11 @@ def main():
     ap.add_argument("--demos", nargs="*", default=[], metavar="STAGE:LAYOUT",
                     help="선생님 대신 빔 탐색 시범으로 가르칠 배치 (예: 10:3)")
     ap.add_argument("--demo-repeat", type=int, default=100, help="시범 (상태, 행동) 쌍을 데이터에 몇 번 넣을지")
+    ap.add_argument("--obs-demos", nargs="*", type=Path, default=[],
+                    help="Unity가 저장한 (관측, 행동) 시범 CSV (LaserRandomDemoProbe). 탐색이 찾은 경로와 회복 경로")
+    ap.add_argument("--obs-demo-repeat", type=int, default=2)
+    ap.add_argument("--skip-teacher-levels", nargs="*", type=int, default=[],
+                    help="이 단계는 선생님 정답을 쓰지 않고 시범만 쓴다 (선생님이 약한 단계)")
     ap.add_argument("--random-layouts", action="store_true",
                     help="고정 캠페인 배치 대신 판마다 새 무작위 배치에서 데이터를 모으고 평가한다 (일반화)")
     args = ap.parse_args()
@@ -144,7 +150,7 @@ def main():
     teacher = StagePolicy(json.loads(args.teachers.read_text(encoding="utf-8"))["models"])
     student = Student(args.hidden, args.seed)
     opt = torch.optim.Adam(student.net.parameters(), lr=1e-3)
-    config = {**vars(args), "out": str(out), "teachers": str(args.teachers), "common": common}
+    config = {**{k: (str(v) if isinstance(v, Path) else [str(x) for x in v] if isinstance(v, list) and v and isinstance(v[0], Path) else v) for k, v in vars(args).items()}, "out": str(out), "common": common}
     (out / "config.json").write_text(json.dumps(config, indent=2, ensure_ascii=False), encoding="utf-8")
 
     demo_x, demo_y, skip = [], [], {}
@@ -159,6 +165,16 @@ def main():
         skip.setdefault(stage, []).append(float(first[0]))
         print(f"시범 {item}: {len(states)}개 행동, 재생 결과 {outcome}", flush=True)
 
+    for path in args.obs_demos:
+        rows = list(csv.DictReader(open(path, encoding="utf-8")))
+        x = np.array([[float(v) for v in r["obs"].split()] for r in rows], dtype=np.float32)
+        y = np.array([int(r["action"]) for r in rows])
+        if x.shape[1] != OBS_DIM:
+            raise ValueError(f"{path}: 관측 크기 {x.shape[1]} != {OBS_DIM}")
+        demo_x.append(np.repeat(x, args.obs_demo_repeat, axis=0))
+        demo_y.append(np.repeat(y, args.obs_demo_repeat))
+        kinds = {k: sum(r["kind"] == k for r in rows) for k in ("demo", "recovery")}
+        print(f"시범 파일 {path.name}: {len(rows)}쌍 {kinds}", flush=True)
     if args.random_layouts:
         env = random_env(common, 30_000 + args.seed, args.worker, 16)
         check = random_env(common, 40_000 + args.seed, args.worker + 1, 10)
@@ -171,6 +187,8 @@ def main():
             beta = 1.0 if (args.mode == "bc" or it == 0) else 0.0
             episodes = 0
             for level in LEVELS:
+                if level in args.skip_teacher_levels:
+                    continue
                 x, y, n = collect(env, teacher, student, level, args.steps_per_level, beta, rng, skip.get(level, ()))
                 data_x.append(x)
                 data_y.append(y)
