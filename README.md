@@ -211,7 +211,19 @@ python -m laser.experiments x11 --sac-device cuda --seeds 0 --parallel 1 --root 
 
 레벨 5에서는 같은 SAC 정책으로 두 배치의 [성공 장면(5.3초)](docs/figures/laser_sac_level5_success.gif)과 [충돌 장면(5.1초)](docs/figures/laser_sac_level5_hit.gif)을 녹화했다. 학습 시드는 1이고, 녹화 환경 시드는 각각 0과 11이다.
 
-결과 (seed 3개, 레벨 1~4 평균 성공률. 자세한 내용은 [실험 결과](docs/results.md#레이저-미션-결과))
+1~10단계 캠페인 결과 (seed 3개, 단계당 최대 3번 시도. 자세한 내용은 [실험 결과](docs/results.md#모방-학습-단계별-ppo를-정책-하나로-합치기-11장))
+
+| 정책 하나로 1~10단계 | 1~10단계 평균 성공률 | 10단계 완주 |
+|---|---:|---:|
+| SAC (강화학습만, 1,200만 스텝) | 57.5% | 0 / 600 |
+| PPO (강화학습만, 1,200만 스텝) | 51.6% | 0 / 600 |
+| 모방 학습 학생 (단계별 PPO 선생님 → BC/DAgger) | **97.1%** | **600 / 600** |
+
+정책 하나로 강화학습을 하면 단계가 늘어날수록 앞 단계를 잊었다. 단계마다 PPO 선생님을 따로 학습한 뒤, 모방 학습(behavior cloning, DAgger)으로 학생 정책 하나에 합쳐 전 단계를 완주했다.
+
+![imitation](docs/figures/laser_imitation.png)
+
+1~4단계 초기 실험 결과 (seed 3개, 레벨 1~4 평균 성공률. 자세한 내용은 [실험 결과](docs/results.md#레이저-미션-결과))
 
 | 설정 | 성공률 | 학습 시간 | 비고 |
 |---|---|---|---|
