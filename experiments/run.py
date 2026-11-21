@@ -4,6 +4,7 @@
   python -m experiments.run e1                 # 알고리즘 비교 (15회 학습)
   python -m experiments.run e1 e2 --parallel 12
   python -m experiments.run e1 --seeds 0 1 --steps 300000   # 빠른 시험 실행
+  python -m experiments.run e1 e8@5-9           # e8만 seed 5~9로 (실험@seed 범위)
 
 이미 끝난 실행(model.pt가 있는 폴더)은 건너뛰므로, 중간에 끊겨도 다시 실행하면 이어진다.
 """
@@ -38,6 +39,14 @@ EXPERIMENTS = {
     # E8 학습 상대 구성(PPO): self-play 비율 0.3 / 0.9. 나머지는 쉬움·무작위 봇이 반씩. 기본값 0.6은 E1과 같다
     "e8": [("ppo_self0.3", "ppo", {"opp_self": 0.3, "opp_easy": 0.35, "opp_random": 0.35}),
            ("ppo_self0.9", "ppo", {"opp_self": 0.9, "opp_easy": 0.05, "opp_random": 0.05})],
+    # E9 같은 시간 약 1시간: PPO 1800만, SAC 140만 스텝 (DQN 300만은 E1, 약 56분)
+    "e9": [("ppo_18m", "ppo", {"total_steps": 18_000_000}),
+           ("sac_1.4m", "sac", {"total_steps": 1_400_000})],
+    # E10 같은 시간 약 2시간: PPO 3600만, DQN 600만 스텝 (SAC 300만은 E1, 약 2시간)
+    "e10": [("ppo_36m", "ppo", {"total_steps": 36_000_000}),
+            ("dqn_6m", "dqn", {"total_steps": 6_000_000})],
+    # E11 학습률: 세 알고리즘 모두 1e-4 / 1e-3. 기본값 3e-4는 E1과 같다
+    "e11": [(f"{a}_lr{lr}", a, {"lr": lr}) for a in ALGOS for lr in ("1e-4", "1e-3")],
     # P1 예비 실험: 본 실험 전에 PPO 설정을 점검한다 (seed 0, 1만 사용)
     "p1": [("ppo_base", "ppo", {}),
            ("ppo_noanneal", "ppo", {"anneal_lr": "false"}),
@@ -52,7 +61,7 @@ EXPERIMENTS = {
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
-    ap.add_argument("experiments", nargs="+", choices=sorted(EXPERIMENTS))
+    ap.add_argument("experiments", nargs="+", help=f"실험 이름 또는 실험@seed범위 (예: e1@5-9). 실험: {', '.join(EXPERIMENTS)}")
     ap.add_argument("--seeds", type=int, nargs="*", default=SEEDS)
     ap.add_argument("--parallel", type=int, default=12, help="동시에 돌릴 학습 수")
     ap.add_argument("--steps", type=int, default=None, help="total_steps 덮어쓰기 (시험용)")
@@ -60,9 +69,16 @@ def main():
     args = ap.parse_args()
 
     jobs = []
-    for exp in args.experiments:
+    for spec in args.experiments:
+        exp, _, seed_range = spec.partition("@")
+        if exp not in EXPERIMENTS:
+            ap.error(f"모르는 실험: {exp}")
+        seeds = args.seeds
+        if seed_range:
+            lo, _, hi = seed_range.partition("-")
+            seeds = list(range(int(lo), int(hi or lo) + 1))
         for name, algo, overrides in EXPERIMENTS[exp]:
-            for seed in args.seeds:
+            for seed in seeds:
                 out = Path(args.root) / exp / f"{name}_seed{seed}"
                 if (out / "model.pt").exists():
                     print(f"건너뜀 (완료됨): {out}")

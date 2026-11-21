@@ -12,6 +12,8 @@
   e6_sac_entropy/         E1 + E6 SAC 목표 엔트로피
   e7_dqn_epsilon/         E1 + E7 DQN 탐험 기간
   e8_opponents/           E1 + E8 학습 상대 구성
+  e9_e10_same_time/       E1 + E5 + E9 + E10 같은 시간 비교 (약 35분, 1시간, 2시간)
+  e11_learning_rate/      E1 + E11 학습률
   dashboard.html          전체 대시보드
 """
 import argparse
@@ -28,8 +30,12 @@ COMPARISONS = {
     "e6_sac_entropy": ["runs/e1", "runs/e6"],
     "e7_dqn_epsilon": ["runs/e1", "runs/e7"],
     "e8_opponents": ["runs/e1", "runs/e8"],
+    "e9_e10_same_time": ["runs/e1", "runs/e5", "runs/e9", "runs/e10"],
+    "e11_learning_rate": ["runs/e1", "runs/e11"],
 }
-EXPERIMENTS = ["e1", "e2", "e3", "e4", "e5", "e6", "e7", "e8"]
+EXPERIMENTS = ["e1", "e2", "e3", "e4", "e5", "e6", "e7", "e8", "e9", "e10", "e11"]
+# 결과가 애매했던 실험은 seed를 10개로 늘린다
+EXTRA_SEEDS = ["e1@5-9", "e8@5-9"]
 
 
 def run(args):
@@ -45,7 +51,7 @@ def main():
     args = ap.parse_args()
 
     start = time.time()
-    code = run(["-m", "experiments.run", *EXPERIMENTS,
+    code = run(["-m", "experiments.run", *EXPERIMENTS, *EXTRA_SEEDS,
                 "--seeds", *args.seeds, "--parallel", str(args.parallel)])
     if code != 0:
         print("일부 학습이 실패했습니다. 성공한 것만으로 정리합니다.", flush=True)
