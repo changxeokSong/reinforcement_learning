@@ -41,8 +41,10 @@ namespace LaserMission
             Application.targetFrameRate = 60;
             int seed = 0;
             int? campaignSeed = null;
+            int? level6Design = null;
             var args = System.Environment.GetCommandLineArgs();
             bool practice = System.Array.IndexOf(args, "-practice") >= 0;
+            bool fixedCampaign = System.Array.IndexOf(args, "-fixed-campaign") >= 0;
             recordOffscreen = System.Array.IndexOf(args, "-record-offscreen") >= 0;
             for (int i = 0; i < args.Length - 1; i++)
             {
@@ -59,13 +61,20 @@ namespace LaserMission
                 }
                 if (args[i] == "-view" && int.TryParse(args[i + 1], out int startView))
                     SelectView(startView);
+                if (args[i] == "-level6-design" && int.TryParse(args[i + 1], out int design))
+                    level6Design = Mathf.Clamp(design, 0, 3);
                 if (args[i] == "-shot") shotPath = args[i + 1];
                 if (args[i] == "-shotdelay") float.TryParse(args[i + 1], out shotDelay);
                 if (args[i] == "-shots") int.TryParse(args[i + 1], out shotCount);
                 if (args[i] == "-record") recordDir = args[i + 1];
             }
             localPlay = !Application.isBatchMode && !Academy.Instance.IsCommunicatorOn;
-            if (localPlay && areas == 1) campaign = new CampaignProgress(campaignSeed);
+            Room.DefaultLevel6Design = level6Design ?? (localPlay ? 2 : 0);
+            if (localPlay)
+            {
+                if (!campaignSeed.HasValue) seed = new System.Random().Next(1_000_000);
+                if (areas == 1) campaign = new CampaignProgress(campaignSeed, procedural: !fixedCampaign);
+            }
             int cols = Mathf.CeilToInt(Mathf.Sqrt(areas));
             for (int i = 0; i < areas; i++)
             {
@@ -161,9 +170,9 @@ namespace LaserMission
 
         void LateUpdate()
         {
-            if (cam == null || rooms.Count == 0) return;
+            if (Application.isBatchMode || cam == null || rooms.Count == 0) return;
             var room = rooms[0];
-            var agentPos = room.transform.Find("AgentVis").position;
+            var agentPos = room.AgentWorldPos;
             Vector3 target, eye;
             switch (view)
             {
@@ -238,9 +247,14 @@ namespace LaserMission
             big ??= new GUIStyle(GUI.skin.label) { fontSize = 42, fontStyle = FontStyle.Bold, alignment = TextAnchor.MiddleCenter };
             small ??= new GUIStyle(GUI.skin.label) { fontSize = 18 };
             var r = rooms[0];
-            string levelLabel = r.Campaign != null
-                ? $"STAGE {r.level}/{Room.MaxLevel}    Layout {r.Campaign.LayoutSeed}"
-                : $"LEVEL {r.level}";
+            string levelLabel = $"LEVEL {r.level}";
+            if (r.Campaign != null)
+            {
+                string attempt = r.Campaign.LayoutSeed < 0
+                    ? $"Attempt {r.Campaign.Attempt}"
+                    : $"Layout {r.Campaign.LayoutSeed}";
+                levelLabel = $"STAGE {r.level}/{Room.MaxLevel}    {attempt}";
+            }
             GUI.Label(new Rect(16, 12, 900, 30),
                 $"{levelLabel}    time {r.time:0.0}s    success {r.successes}   hit {r.hits}   timeout {r.timeouts}", small);
             // Python(laser.watch)이 학습 중인 AI를 보여 줄 때 알고리즘과 학습량을 띄운다

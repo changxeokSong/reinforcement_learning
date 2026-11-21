@@ -87,7 +87,8 @@ def collect(env, teacher, student, level, steps, beta, rng, skip_spawns=()):
         fresh = obs[:, TIME_INDEX] == 0
         if skip_spawns:
             skip[fresh] = np.any(np.abs(obs[fresh, 0][:, None] - np.array(skip_spawns)[None]) < 2e-3, axis=1)
-        expert = teacher.act(obs)
+        mask = env.action_mask
+        expert = teacher.act(obs) if mask is None else teacher.act(obs, action_mask=mask)
         states.append(obs[~skip].copy())
         labels.append(expert[~skip])
         actions = np.where(by_teacher, expert, student.act(obs))

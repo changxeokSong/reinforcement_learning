@@ -171,3 +171,120 @@ CartPole PPO의 마지막 20판 평균 리턴은 학습 시드 0·1·2에서 각
 .venv-unity\Scripts\python -m laser.train --algo ppo --seed 0 --set potential_shaping=true
 .venv\Scripts\python -m tests.check_algos --algo ppo --seeds 0 1 2 --diagnostics-out runs/results/laser/cartpole_ppo_diagnostics.json
 ```
+
+### 6단계 설계 재검증
+
+Unity의 `LaserSolvabilityProbe.RunLevel6Audit`를 `-level6-audit-output <절대 경로>`와 함께 실행하면
+동일한 생성 시드 60개와 캠페인 배치 4개에서 설계 0~2의 통과 경로와 조작 오차 허용 정도를 검사한다.
+`level6_design=0`은 기존 배치다. 1은 이중벽의 공칭 간격을 1.10m에서 1.44m로 넓힌다.
+2는 좁은 통로의 물리적 폭도 1.10m에서 1.36m로 넓힌다. 3은 좁은 통로의 좌우 이동 속도 제한을 추가한 비교 후보다.
+`obs_mode=2`는 6단계에서 움직이는 통로 하나를 관측 한 칸으로 나타내고 진입 중심, 충돌 여유, 좌우 속도를 제공한다.
+깜빡이는 전폭 벽도 별도 유형으로 표시한다.
+
+당시 Unity 실행 파일을 직접 플레이하면 설계 3이 적용됐다. 최신 게임은 아래 리팩토링 빌드의 설정을 사용한다. 정책 학습과 실험에서는 설계 0~3을 지정할 수 있다.
+
+```powershell
+# 수정 소스로 별도 빌드를 만든 뒤 실행
+.venv-unity\Scripts\python -m tests.check_level6 --candidate runs/level6_parallel_build/LaserMission.exe
+.venv-unity\Scripts\python -m laser.level6_eval --build runs/level6_parallel_build/LaserMission.exe
+.venv-unity\Scripts\python -m laser.level6_eval --build runs/level6_parallel_build/LaserMission.exe --root runs/laser/level6_redesign_warm --out runs/results/laser/level6_redesign_warm.json --init-policy runs/laser/specialists_rand2/ppo_level6_seed0/model.pt
+.venv\Scripts\python -m laser.level6_report
+# Unity에서 6단계만 직접 플레이
+& runs/level6_release/LaserMission.exe -level 6
+# 새 무작위 배치에서 DAgger 학생 관전
+.venv-unity\Scripts\python -m laser.watch runs/laser/imitation/dagger_rand_h512_long_seed0/model.pt --campaign --procedural --build runs/level6_release/LaserMission.exe --level6-design 3 --view chase
+```
+
+표와 그래프는 `runs/results/laser/level6_redesign.md`, `level6_redesign.png`에 저장된다.
+
+속도 제한만 바꾼 PPO 추가 학습을 비교하려면 `laser.level6_eval --speed-comparison`을 실행한다.
+과거 결과에 덮어쓰지 않도록 `--root runs/laser/level6_speed_warm` 및
+`--out runs/results/laser/level6_speed_warm.json`을 지정한다. 6단계에 PPO 전문 정책을 연결하는
+후속 검증은 `python -m laser.level6_integration`으로 재현한다. 아래 관전 명령은 간격·폭을 바꾼 설계에서
+6단계에만 PPO를 사용한다.
+
+```powershell
+.venv-unity\Scripts\python -m laser.watch runs/laser/imitation/dagger_rand_h512_long_seed0/model.pt --campaign --procedural --build runs/level6_release/LaserMission.exe --level6-design 2 --level6-policy runs/laser/level6_speed_warm/geometry_seed0/model.pt --view chase
+```
+
+### 충돌 예측을 쓰는 캠페인
+
+Unity는 현재 레이저 배치에서 27개 후보 행동을 실제 이동·충돌 계산으로 시험하고, 다음 결정까지 충돌 없이 이어갈 수 있는 행동을 표시한다. 0.2초까지 안전한 행동이 없으면 0.1초 조건으로 좁히고, 그때도 선택지가 없으면 정책의 원래 행동 점수를 사용한다. 예측 도중 위치·속도·시간을 복원하며, 보상이나 충돌 횟수도 기록하지 않는다.
+
+Python은 이 표시를 받아 정책 점수가 가장 높은 허용 행동을 선택한다. 신경망 입력은 기존 관측 66개다. 충돌 예측은 그 관측에 포함되지 않은 Unity 내부 상태도 사용하므로 순수 강화학습과 별도의 결과로 기록한다.
+
+```powershell
+# 4·5·6·7·9·10단계 예측을 켜고 관전
+.venv-unity\Scripts\python -m laser.watch runs/laser/imitation/dagger_rand_h512_long_seed0/model.pt --campaign --procedural --build runs/action_safety_release/LaserMission.exe --level6-design 2 --level6-policy runs/laser/level6_speed_warm/geometry_seed0/model.pt --safety-horizon 2 --safety-levels 4 5 6 7 9 10 --view chase
+
+# 동일 빌드와 시드에서 대조군 및 추가 학습 모델 평가
+.venv-unity\Scripts\python -m laser.action_safety_eval --parallel 6
+.venv-unity\Scripts\python -m laser.action_safety_eval --conditions several_stages_safety --eval-seed 99000 --out runs/results/laser/action_safety_confirmation.json
+.venv-unity\Scripts\python -m laser.action_safety_eval --conditions include_stage7 --eval-seed 99000 --out runs/results/laser/action_safety_stage7.json
+
+# 실제 행동과 예측 결과의 일치 검사
+.venv-unity\Scripts\python -m tests.check_level6 --reference runs/level6_release/LaserMission.exe --candidate runs/action_safety_release/LaserMission.exe --check-safety
+```
+
+`--safety-horizon 0`은 기본 정책, `1`은 결정 한 번(0.1초), `2`는 두 번(0.2초)을 시험한다. `--safety-levels`로 적용할 단계를 지정한다. 캠페인 평가에서는 단계당 3회까지만 허용한다. 관전 모드에서는 단계 통과까지 새 배치에 계속 재도전한다.
+
+### 회전 레이저의 벽 쪽 우회 수정
+
+폭 8m인 방에서 캐릭터 중심은 중심선에서 좌우 3.7m까지 움직인다. 기존 회전 레이저의 반지름은 3.2m라서 캐릭터가 벽에 붙으면 빔의 충돌 거리 0.34m 밖에 있었다. 새 레이저는 방을 가로지를 때 양쪽 벽에 닿고, 회전 각도에 따라 빔 길이를 조정해 앞뒤 최대 범위는 중심 기준 3.2m로 제한한다. 화면, 충돌, 정책 관측, 충돌 예측 모두 같은 선분을 사용한다.
+
+```powershell
+# 수정판에서 직접 플레이
+& .\runs\rotor_rebalance\LaserMission.exe -level 3
+
+# 수정판의 AI 관전
+.venv-unity\Scripts\python -m laser.watch runs/laser/imitation/dagger_rand_h512_long_seed0/model.pt --campaign --procedural --build runs/rotor_rebalance/LaserMission.exe --level6-design 2 --level6-policy runs/laser/level6_speed_warm/geometry_seed0/model.pt --safety-horizon 2 --safety-levels 4 5 6 7 9 10 --view chase
+
+# 이전 실험과 동일한 조건으로 수정판 평가
+.venv-unity\Scripts\python -m laser.action_safety_eval --conditions include_stage7 --build runs/rotor_rebalance/LaserMission.exe --eval-seed 99000 --out runs/results/laser/rotor_campaign_eval.json
+```
+
+Unity 에디터의 배치 실행에서 `LaserSolvabilityProbe.RunRotorAudit`를 `-rotor-audit-output <절대 CSV 경로>`와 함께 호출하면 가장자리 충돌, 점프·슬라이딩, 통과 경로 재생을 검사한다. `LaserSolvabilityProbe.RunLaserBoundsAudit`는 모든 단계의 레이저 끝점과 벽 통로 범위를 검사한다.
+
+수정판 실행 파일을 다시 만들려면 같은 Unity 버전에서 `LaserBuild.BuildWindows`를 실행하고 `-laser-build-path`에 출력 실행 파일의 절대 경로를 지정한다.
+
+### 리팩토링 빌드와 전체 재학습
+
+`Room.cs`에는 이동·충돌과 에피소드 진행을 두고, 배치 생성·관측·화면은 `Room.Layouts.cs`, `Room.Observations.cs`, `Room.Visuals.cs`로 분리했다. 충돌 예측은 방의 운동 상태 복사본에서 계산한다. 학습용 배치 모드는 화면 오브젝트를 생성하지 않고, 관측 생성은 정렬용 리스트를 재사용한다.
+
+`runs/laser_game_release/LaserMission.exe`를 실행하면 1단계에서 시작해 매번 새 배치를 생성한다. 사망 후 R로 재도전하고, 클리어 후 Enter로 다음 단계에 진입한다. 10단계에서 캠페인이 끝난다. 6단계 통로는 직접 플레이와 새 학습에서 설계 2를 사용한다. 같은 재도전 순서를 재현하려면 `-envseed 716`을, 예전 고정 배치 4종을 직접 비교하려면 `-fixed-campaign`을 사용한다.
+
+```powershell
+& .\runs\laser_game_release\LaserMission.exe
+
+# 동일한 게임 규칙으로 만든 학습용 빌드에서 비교 실험 실행
+.venv-unity\Scripts\python -m laser.experiments refactor refactor_curriculum --parallel 7 --build runs/laser_refactor_release/LaserMission.exe
+.venv-unity\Scripts\python -m laser.campaign_eval --study refactor --parallel 6 --out runs/results/laser/refactor_results.json
+.venv-unity\Scripts\python -m laser.campaign_eval --study refactor_curriculum --parallel 6 --out runs/results/laser/refactor_curriculum_results.json
+
+# 완주용 6단계 PPO와 DAgger 재학습 및 홀드아웃 평가
+.venv-unity\Scripts\python -m laser.retrain_campaign
+
+# 검증 시드에서 선택한 완주용 구성 관전
+.venv-unity\Scripts\python -m laser.watch runs/laser/retrained_campaign/dagger_seed0/model.pt --campaign --procedural --level6-design 2 --level6-policy runs/laser/retrained_campaign/ppo_seed0/model.pt --safety-horizon 2 --safety-levels 4 5 6 7 9 10 --view chase
+
+# 관측·보상·종료 플래그의 회귀검사
+.venv-unity\Scripts\python -m tests.check_level6 --all-stages --check-safety --reference runs/rotor_rebalance/LaserMission.exe --candidate runs/laser_refactor_release/LaserMission.exe
+```
+
+두 비교 실험은 PPO·SAC·Double DQN을 초기 가중치에서 시드당 1,048,576 환경 스텝씩 학습한다. 첫 조건은 레벨을 균등 추출하고, 둘째는 알고리즘마다 동일한 스텝 경계에서 레벨을 높이고 이전 단계를 복습한다. 두 조건 모두 학습과 평가에서 절차 생성 배치를 사용하고, 순차 평가에서는 단계당 3회 시도한다. 완주용 구성은 이전 체크포인트에서 출발해 추가 학습하며 실행 시 충돌 예측을 사용한다.
+
+### 정책 후속 실험
+
+1단계에서는 커리큘럼 PPO 가중치를 시드별로 불러와 엔트로피 계수 0.01과 0.04에서 각각 262,144스텝을 추가 학습했다. 개선된 1단계 정책은 개별 관전 명령으로 볼 수 있다. 6단계 예측 길이 실험은 별도 빌드에서 같은 PPO·DAgger 가중치에 0.2초와 0.3초 예측을 적용한다.
+
+```powershell
+.venv-unity\Scripts\python -m laser.watch runs/laser/level1_entropy/control_seed0/model.pt --level 1 --procedural --build runs/laser_game_release/LaserMission.exe --view chase
+.venv-unity\Scripts\python -m laser.policy_followup entropy --build runs/laser_game_release/LaserMission.exe
+.venv-unity\Scripts\python -m laser.policy_followup horizon --build runs/laser_horizon_trial/LaserMission.exe
+```
+
+6단계에서 0.3초 예측으로 관전하려면 아래 명령을 실행한다. 실험 빌드가 자동으로 선택된다. 캠페인 관전의 기본 예측은 0.2초다.
+
+```powershell
+.venv-unity\Scripts\python -m laser.watch runs/laser/retrained_campaign/ppo_seed0/model.pt --level 6 --procedural --level6-design 2 --safety-horizon 2 --stage6-safety-horizon 3 --view chase
+```

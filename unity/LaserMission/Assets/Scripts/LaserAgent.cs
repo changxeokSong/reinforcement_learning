@@ -14,6 +14,7 @@ namespace LaserMission
     {
         public Room room;
         readonly List<float> buffer = new List<float>(Room.ObsSize);
+        readonly bool[] safeActions = new bool[Room.NumActions];
 
         public override void OnEpisodeBegin() => room.ResetEpisode();
 
@@ -22,6 +23,27 @@ namespace LaserMission
             buffer.Clear();
             room.Observe(buffer);
             sensor.AddObservation(buffer);
+        }
+
+        public override void WriteDiscreteActionMask(IDiscreteActionMask mask)
+        {
+            var parameters = Academy.Instance.EnvironmentParameters;
+            int horizon = Mathf.RoundToInt(parameters.GetWithDefault("level6_safety_steps", 0f));
+            if (horizon < 1) return;
+            int stageMask = Mathf.RoundToInt(parameters.GetWithDefault("safety_stage_mask", 1 << 6));
+            if ((stageMask & (1 << room.level)) == 0) return;
+
+            if (room.level == 6)
+                horizon = Mathf.RoundToInt(parameters.GetWithDefault("safety_horizon_stage6", horizon));
+            for (int steps = Mathf.Min(horizon, 3); steps > 0; steps--)
+            {
+                room.FindSafeActions(safeActions, steps);
+                // Fall back to a shorter horizon before allowing every action.
+                if (!System.Array.Exists(safeActions, safe => safe)) continue;
+                for (int action = 0; action < safeActions.Length; action++)
+                    if (!safeActions[action]) mask.SetActionEnabled(0, action, false);
+                return;
+            }
         }
 
         public override void OnActionReceived(ActionBuffers actions)

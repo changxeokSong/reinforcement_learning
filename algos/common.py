@@ -60,15 +60,24 @@ class FrozenPolicy:
         self.rng = np.random.default_rng(seed)
 
     @torch.no_grad()
-    def act(self, obs):
+    def act(self, obs, *, action_mask=None):
         out = self.net(torch.as_tensor(obs, dtype=torch.float32))
+        if action_mask is not None:
+            unavailable = action_mask[:, self.table]
+            if unavailable.all(axis=1).any():
+                raise ValueError("Every observation needs an available action in the policy's action table")
+            out = out.masked_fill(torch.as_tensor(unavailable), -torch.inf)
         if self.greedy:
             a = out.argmax(-1).numpy()
         elif self.kind == "dqn":
             # 상대로 쓸 때는 완전히 결정적이지 않게 약간의 무작위 행동을 섞는다
             a = out.argmax(-1).numpy()
             explore = self.rng.random(len(a)) < 0.05
-            a[explore] = self.rng.integers(0, out.shape[-1], size=int(explore.sum()))
+            if action_mask is None:
+                a[explore] = self.rng.integers(0, out.shape[-1], size=int(explore.sum()))
+            else:
+                for slot in np.flatnonzero(explore):
+                    a[slot] = self.rng.choice(np.flatnonzero(~unavailable[slot]))
         else:
             a = torch.distributions.Categorical(logits=out).sample().numpy()
         return self.table[a]

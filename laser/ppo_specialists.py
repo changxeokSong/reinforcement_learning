@@ -21,12 +21,13 @@ class StagePolicy:
         if set(self.policies) != set(LEVELS) or any(p.kind not in ("ppo", "sac") for p in self.policies.values()):
             raise ValueError("Expected one PPO or SAC model for each stage")
 
-    def act(self, obs):
+    def act(self, obs, *, action_mask=None):
         levels = np.rint(4 * obs[:, LEVEL_INDEX]).astype(int)
         actions = np.empty(len(obs), dtype=np.int64)
         for level in np.unique(levels):
             slots = levels == level
-            actions[slots] = self.policies[level].act(obs[slots])
+            mask = None if action_mask is None else action_mask[slots]
+            actions[slots] = self.policies[level].act(obs[slots], action_mask=mask)
         return actions
 
 

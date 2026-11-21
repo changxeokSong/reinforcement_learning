@@ -6,13 +6,16 @@ namespace LaserMission
         public const int LayoutCount = 4;
         readonly int[] layouts = new int[Room.MaxLevel];
         readonly System.Random random;
+        readonly bool procedural;
 
         public int Stage { get; private set; } = 1;
-        public int LayoutSeed => layouts[Stage - 1];
+        public int Attempt { get; private set; } = 1;
+        public int LayoutSeed => procedural ? -1 : layouts[Stage - 1];
         public Phase CurrentPhase { get; private set; } = Phase.Playing;
 
-        public CampaignProgress(int? seed = null)
+        public CampaignProgress(int? seed = null, bool procedural = false)
         {
+            this.procedural = procedural;
             random = seed.HasValue ? new System.Random(seed.Value) : new System.Random();
             for (int i = 0; i < layouts.Length; i++)
                 layouts[i] = seed.HasValue
@@ -30,13 +33,23 @@ namespace LaserMission
 
         public void Continue()
         {
-            if (CurrentPhase == Phase.StageCleared) Stage++;
+            if (CurrentPhase == Phase.StageCleared)
+            {
+                Stage++;
+                Attempt = 1;
+            }
             else if (CurrentPhase == Phase.Complete)
             {
                 Stage = 1;
-                for (int i = 0; i < layouts.Length; i++) Reroll(i);
+                Attempt = 1;
+                if (!procedural)
+                    for (int i = 0; i < layouts.Length; i++) Reroll(i);
             }
-            else Reroll(Stage - 1);
+            else
+            {
+                Attempt++;
+                if (!procedural) Reroll(Stage - 1);
+            }
             CurrentPhase = Phase.Playing;
         }
 

@@ -32,6 +32,7 @@ COMMON = {
     "shaping": 0.5,             # 금고 쪽으로 다가간 거리에 주는 보조 보상 (출발→금고 전체 합)
     "potential_shaping": False, # γΦ(s')−Φ(s), 종료 상태의 Φ는 0
     "campaign_layouts": False,  # 실제 10단계 캠페인의 배치와 재도전 규칙을 사용한다.
+    "level6_design": 0,
     "time_penalty": 0.01,       # 매 결정(0.1초)마다 빼는 시간 벌점
     "level_mix": 0.0,
     "level_mix_from": 2,
@@ -45,6 +46,7 @@ COMMON = {
     "training_layout": -1,      # 학습 전용 빌드: 이 배치(0~3)를 training_layout_prob 확률로 고정 (어려운 배치 집중)
     "training_layout_prob": 0.5,
     "curriculum_threshold": 0.8,
+    "curriculum_promote_on_success": True,
     "curriculum_window": 300,
     "curriculum_track_actual_level": False,
     "curriculum_deadlines": [],  # 누적 스텝 상한. 난이도별 승급이 지연돼도 마지막 레벨을 학습한다.
@@ -80,7 +82,9 @@ def evaluate(env, policy, levels, rounds):
             episode_return = np.zeros(env.n, dtype=np.float64)
             while not done.all():
                 active = ~done & ~warmup
-                r = env.evaluation_step(policy.act(obs), warmup)
+                mask = env.action_mask
+                actions = policy.act(obs) if mask is None else policy.act(obs, action_mask=mask)
+                r = env.evaluation_step(actions, warmup)
                 episode_return[active] += r["reward"][active]
                 for i, kind, length in r["results"]:
                     if not done[i]:
@@ -136,7 +140,7 @@ def train(algo, seed, overrides, out_dir, worker_id=0, init_policy=None):
     env_kw = dict(shaping=common["shaping"], time_penalty=common["time_penalty"],
                   obs_mode=common["obs_mode"], time_scale=common["time_scale"],
                   potential_shaping=common["potential_shaping"], shaping_gamma=agent.cfg["gamma"],
-                  campaign_layouts=common["campaign_layouts"])
+                  campaign_layouts=common["campaign_layouts"], level6_design=common["level6_design"])
     if common["build"]:
         env_kw["build"] = common["build"]
     train_kw = {**env_kw, "build": common["training_build"]} if common["training_build"] else env_kw
@@ -231,7 +235,7 @@ def train(algo, seed, overrides, out_dir, worker_id=0, init_policy=None):
                 del recent[:2500]
             if mode == "curriculum" and level < common["max_level"]:
                 window = [k for lv, k in recent if lv == level][-common["curriculum_window"]:]
-                qualified = len(window) >= common["curriculum_window"] and (
+                qualified = common["curriculum_promote_on_success"] and len(window) >= common["curriculum_window"] and (
                     window.count("success") / len(window) >= common["curriculum_threshold"]
                 )
                 deadline_reached = bool(deadlines) and steps >= deadlines[level]

@@ -17,10 +17,12 @@ import time
 from pathlib import Path
 
 from algos.common import load_policy
-from laser.env import LaserEnv
+from laser.env import ROOT, LaserEnv
 
 ALGO_CODE = {"ppo": 1, "dqn": 2, "sac": 3}
 CAMERA_VIEWS = ("overview", "chase", "side", "front")
+SAFETY_BUILD = ROOT / "runs" / "laser_game_release" / "LaserMission.exe"
+STAGE6_HORIZON_BUILD = ROOT / "runs" / "laser_horizon_trial" / "LaserMission.exe"
 
 
 def find_model(path):
@@ -54,8 +56,21 @@ def main():
     ap.add_argument("--speed", type=float, default=1.0, help="재생 배속")
     ap.add_argument("--view", choices=CAMERA_VIEWS, default="overview", help="시작 카메라 시점")
     ap.add_argument("--sample", action="store_true", help="가장 좋은 행동 대신 확률대로 고른다")
+    ap.add_argument("--build", type=Path, help="관전할 Unity 실행 파일")
+    ap.add_argument("--level6-design", type=int, choices=range(4), help="6단계 기하 설계")
+    ap.add_argument("--level6-policy", type=Path, help="6단계에서 사용할 별도 정책 체크포인트")
+    ap.add_argument("--safety-horizon", type=int, choices=(0, 1, 2), default=0,
+                    help="충돌 예측 길이 (0은 끔, 1은 0.1초, 2는 0.2초)")
+    ap.add_argument("--safety-levels", type=int, nargs="+", choices=range(1, 11), default=[6],
+                    help="충돌 예측을 적용할 단계 (기본: 6)")
+    ap.add_argument("--stage6-safety-horizon", type=int, choices=(1, 2, 3),
+                    help="6단계에 따로 적용할 결정 횟수 (최대 0.3초)")
+    ap.add_argument("--procedural", action="store_true", help="판마다 새 배치를 생성한다")
     ap.add_argument("--worker", type=int, default=90)
     args = ap.parse_args()
+    if args.stage6_safety_horizon is not None and (not args.safety_horizon or 6 not in args.safety_levels):
+        ap.error("6단계 예측 길이를 따로 지정하려면 6단계 충돌 예측을 켜세요")
+    specialist = load_policy(args.level6_policy, greedy=not args.sample) if args.level6_policy else None
 
     run = Path(args.run)
     run_dir = run if run.is_dir() else run.parent
@@ -83,11 +98,21 @@ def main():
         cfg = json.loads((run_dir / "config.json").read_text(encoding="utf-8"))
     except (OSError, ValueError):
         cfg = {}
-    build = manifest["build"] if manifest else cfg.get("common", {}).get("build")
+    common = cfg.get("common", {})
+    if args.safety_horizon and args.build is None:
+        build = STAGE6_HORIZON_BUILD if args.stage6_safety_horizon is not None else SAFETY_BUILD
+        if not build.is_file():
+            ap.error("충돌 예측을 지원하는 Unity 실행 파일을 --build로 지정하세요")
+    else:
+        build = args.build or (manifest["build"] if manifest else common.get("build"))
     build_args = {"build": build} if build else {}
+    design = common.get("level6_design", 0) if args.level6_design is None else args.level6_design
+    campaign_layouts = not args.procedural and (args.campaign or common.get("campaign_layouts", False))
     env = LaserEnv(n_areas=1, seed=int(time.time()) % 10000, worker_id=args.worker, level=level,
                    time_scale=args.speed, graphics=True, extra_args=["-view", str(CAMERA_VIEWS.index(args.view))],
-                   campaign_layouts=args.campaign or cfg.get("common", {}).get("campaign_layouts", False),
+                   campaign_layouts=campaign_layouts, obs_mode=common.get("obs_mode", 1), level6_design=design,
+                   level6_safety_steps=args.safety_horizon, safety_levels=args.safety_levels,
+                   stage6_safety_horizon=args.stage6_safety_horizon,
                    **build_args)
     env.set_param("hud_algo", ALGO_CODE.get("ppo" if manifest else cfg.get("algo"), 0))
     loaded_at = None
@@ -117,12 +142,17 @@ def main():
                 else:
                     env.set_level(level)
                     obs = env.reset(expected_level=level)
-            steps = policy.policies[level].steps if manifest else policy.steps
-            if manifest:
+            active_policy = specialist if specialist and level == 6 else policy
+            steps = active_policy.policies[level].steps if active_policy is policy and manifest else active_policy.steps
+            if manifest or specialist:
                 env.set_param("hud_step", steps or 0)
             done = False
             while not done:
-                actions = policy.act(obs)
+                if env.action_mask is None:
+                    actions = active_policy.act(obs)
+                else:
+                    masked_policy = active_policy.policies[level] if active_policy is policy and manifest else active_policy
+                    actions = masked_policy.act(obs, action_mask=env.action_mask)
                 r = env.evaluation_step(actions, warmup) if args.campaign else env.step(actions)
                 obs = r["obs"]
                 for _, kind, length in r["results"]:

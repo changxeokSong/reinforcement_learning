@@ -29,7 +29,37 @@ RANDOM_CAMPAIGN = {
     "curriculum_deadlines": [150_000, 400_000, 800_000, 1_250_000, 1_950_000,
                              3_200_000, 4_300_000, 5_300_000, 6_250_000, 7_200_000],
 }
+REFACTOR_CAMPAIGN = {
+    "total_steps": 1_048_576,
+    "level": "random",
+    "max_level": 10,
+    "eval_levels": list(range(1, 11)),
+    "campaign_layouts": False,
+    "level6_design": 2,
+    "eval_interval": 262_144,
+    "eval_rounds": 2,
+    "final_rounds": 10,
+}
+REFACTOR_STUDIES = {
+    "refactor": REFACTOR_CAMPAIGN,
+    "refactor_curriculum": {
+        **REFACTOR_CAMPAIGN,
+        "level": "curriculum",
+        "level_mix": 0.5,
+        "curriculum_track_actual_level": True,
+        "curriculum_promote_on_success": False,
+        "curriculum_deadlines": [32_768, 147_456, 262_144, 376_832, 491_520,
+                                 606_208, 720_896, 802_816, 884_736, 966_656],
+    },
+}
+REFACTOR_ALGOS = {
+    "ppo": {"hidden": 128},
+    "dqn": {"hidden": 128, "batch_size": 128, "train_freq": 16},
+    "sac": {"hidden": 128, "batch_size": 128, "train_freq": 16, "grad_clip": 10.0, "target_clip": 3.0},
+}
 EXPERIMENTS = {
+    **{name: [(algo, algo, {**common, **settings}) for algo, settings in REFACTOR_ALGOS.items()]
+       for name, common in REFACTOR_STUDIES.items()},
     # X1 알고리즘 비교: 커리큘럼 학습
     "x1": [(a, a, {}) for a in ["ppo", "dqn", "sac"]],
     # X2 학습 방식: 레벨 무작위 / 처음부터 레벨 4 (커리큘럼은 X1의 ppo와 공유)
@@ -74,6 +104,9 @@ def build_digest(folder):
     for path in sorted(folder.rglob("*")):
         relative = path.relative_to(folder)
         if not path.is_file() or any("DoNotShip" in part for part in relative.parts):
+            continue
+        # ML-Agents rewrites these diagnostics on shutdown. Hash packaged files only.
+        if path.suffix == ".log" or ("ML-Agents" in relative.parts and "Timers" in relative.parts):
             continue
         file_digest = hashlib.sha256()
         with path.open("rb") as stream:
@@ -129,6 +162,14 @@ def main():
             for seed in args.seeds:
                 out = Path(args.root) / "laser" / exp / f"{name}_seed{seed}"
                 if (out / "model.pt").exists():
+                    if exp in REFACTOR_STUDIES:
+                        config = json.loads((out / "config.json").read_text(encoding="utf-8"))
+                        expected = {**REFACTOR_STUDIES[exp], "build": str(build)}
+                        if args.steps:
+                            expected["total_steps"] = args.steps
+                        if (not config.get("finished") or config["algo"] != algo or config["seed"] != seed
+                            or any(config["common"][key] != value for key, value in expected.items())):
+                            raise SystemExit(f"Existing model does not match this build or study: {out}")
                     if exp in ("x8", "x9", "x10", "x11", "x12", "x13"):
                         config = json.loads((out / "config.json").read_text(encoding="utf-8"))
                         expected_level = overrides["max_level"]

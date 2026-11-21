@@ -29,8 +29,17 @@ FORWARD_ACTION = 7
 class LaserEnv:
     def __init__(self, n_areas=16, seed=0, worker_id=0, level=0, shaping=0.5, time_penalty=0.01, obs_mode=1, extra_args=(),
                  time_scale=100.0, graphics=False, build=DEFAULT_BUILD, *, potential_shaping=False, shaping_gamma=0.99,
-                 campaign_layouts=False):
+                 campaign_layouts=False, level6_design=0, level6_safety_steps=0, safety_levels=(6,),
+                 stage6_safety_horizon=None):
+        if level6_safety_steps not in (0, 1, 2):
+            raise ValueError("level6_safety_steps must be between 0 and 2")
+        safety_stages = set(safety_levels) if level6_safety_steps else set()
+        if stage6_safety_horizon is not None and (
+            stage6_safety_horizon not in (1, 2, 3) or 6 not in safety_stages
+        ):
+            raise ValueError("Stage 6 horizon needs safety enabled for stage 6 and must be between 1 and 3")
         self.n = n_areas
+        self.level6_safety_steps = level6_safety_steps
         self.engine = EngineConfigurationChannel()
         self.params = EnvironmentParametersChannel()
         self.env = UnityEnvironment(
@@ -45,6 +54,13 @@ class LaserEnv:
         self.set_level(level)
         if campaign_layouts:
             self.set_param("campaign_layouts", 1)
+        if level6_design:
+            self.set_param("level6_design", level6_design)
+        if level6_safety_steps:
+            self.set_param("level6_safety_steps", level6_safety_steps)
+            self.set_param("safety_stage_mask", sum(1 << stage for stage in safety_stages))
+        if stage6_safety_horizon is not None:
+            self.set_param("safety_horizon_stage6", stage6_safety_horizon)
         self.set_param("shaping", shaping)
         if potential_shaping:
             self.set_param("potential_shaping", 1)
@@ -58,6 +74,7 @@ class LaserEnv:
         self.ids = np.sort(dec.agent_id)
         self.slot = {a: i for i, a in enumerate(self.ids)}
         self.obs = self._gather(dec)
+        self._gather_action_mask(dec)
         self.ep_len = np.zeros(n_areas, dtype=np.int64)
 
     def set_param(self, key, value):
@@ -74,11 +91,21 @@ class LaserEnv:
             out[self.slot[a]] = steps.obs[0][k]
         return out
 
+    def _gather_action_mask(self, steps):
+        self.action_mask = None
+        if self.level6_safety_steps and steps.action_mask is not None:
+            mask = np.zeros((self.n, N_ACTIONS), dtype=bool)
+            for index, agent_id in enumerate(steps.agent_id):
+                mask[self.slot[agent_id]] = steps.action_mask[0][index]
+            if mask.any():
+                self.action_mask = mask
+
     def reset(self, *, expected_level=None):
         """모든 방을 새 에피소드로 시작한다 (평가할 때 쓴다)."""
         self.env.reset()
         dec, _ = self.env.get_steps(self.behavior)
         self.obs = self._gather(dec)
+        self._gather_action_mask(dec)
         self.ep_len[:] = 0
         if expected_level is not None:
             actual = self.obs[:, LEVEL_INDEX] * 4
@@ -102,6 +129,7 @@ class LaserEnv:
         for k, a in enumerate(dec.agent_id):
             reward[self.slot[a]] = dec.reward[k]
         obs = self._gather(dec)
+        self._gather_action_mask(dec)
         final_obs = obs.copy()
         terminated = np.zeros(self.n, dtype=bool)
         truncated = np.zeros(self.n, dtype=bool)

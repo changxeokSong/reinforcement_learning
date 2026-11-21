@@ -31,7 +31,7 @@ namespace LaserMission
         public float GapX(float t) => gapCenter + gapAmp * Mathf.Sin(omega * t + phase);
 
         public const float Radius = 0.04f;
-        public const float RotorHalfLength = 3.2f;
+        public const float RotorDepthReach = 3.2f;
         public const float SweeperTop = 2.6f;
 
         public void Segment(float t, out Vector3 a, out Vector3 b)
@@ -63,10 +63,13 @@ namespace LaserMission
                 case LaserKind.Rotor:
                 {
                     float th = omega * t + phase;
-                    var d = new Vector3(Mathf.Cos(th), 0f, Mathf.Sin(th)) * RotorHalfLength;
+                    var direction = new Vector3(Mathf.Cos(th), 0f, Mathf.Sin(th));
+                    // Reach both side walls on a crosswise pass while leaving room between adjacent gates.
+                    float x = direction.x / halfW, z = direction.z / RotorDepthReach;
+                    var d = direction / Mathf.Sqrt(x * x + z * z);
                     var c = new Vector3(0f, height, z0);
-                    a = c - d;
-                    b = c + d;
+                    a = ClipRotorEnd(c, c - d);
+                    b = ClipRotorEnd(c, c + d);
                     break;
                 }
                 default: // Blinker
@@ -74,6 +77,13 @@ namespace LaserMission
                     b = new Vector3(halfW, height, z0);
                     break;
             }
+        }
+
+        static Vector3 ClipRotorEnd(Vector3 pivot, Vector3 end)
+        {
+            if (Mathf.Abs(end.z) <= Room.HalfLength) return end;
+            float wallZ = Mathf.Sign(end.z) * Room.HalfLength;
+            return Vector3.LerpUnclamped(pivot, end, (wallZ - pivot.z) / (end.z - pivot.z));
         }
 
         public bool Active(float t)
