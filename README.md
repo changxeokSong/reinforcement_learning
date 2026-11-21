@@ -257,7 +257,7 @@ GIF는 `python -m laser.record_steps steps` / `full`로 다시 만든다.
 
 ## 보고서
 
-레이저 미션 발표 자료는 [docs/LaserMission_presentation.pptx](docs/LaserMission_presentation.pptx)다. 17장으로, 처음 실패부터 정책 하나로 10단계를 완주하기까지를 단계별로 구성했다(`tools/build_presentation.js`로 다시 만든다). 제출 전에 표지와 기여 항목에 팀원 이름·학번과 담당 작업을 넣는다. 배구 쪽 발표 순서는 [보고서 구성안](docs/report_outline.md)을 참고한다.
+최종 제출 발표 자료는 레이저 미션 [docs/LaserMission_presentation.pptx](docs/LaserMission_presentation.pptx)다. 32장이고 과제 평가 기준 순서(주제·목표 → 환경과 MDP → 알고리즘·하이퍼파라미터·구현 검증 → 실험 셋업·평가 지표 → 결과 → 한계 → 기여·참고 자료)를 따른다. 발표 없이 제출하므로 각 슬라이드에 설명 노트를 달았다. `tools/build_presentation.js`로 다시 만든다(`npm install pptxgenjs@3.12.0`). 제출 전에 이 파일의 `TEAM` 배열에 팀원 학번·이름을 넣고, 기여 슬라이드의 담당 작업을 실제에 맞게 고친다.
 
 ## 팀
 

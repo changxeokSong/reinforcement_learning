@@ -64,6 +64,18 @@ function stepBadge(s, label, x, y, color) {
   s.addShape(pres.shapes.OVAL, { x, y, w: 0.42, h: 0.42, fill: { color }, line: { color }, objectName: "badge " + label });
   s.addText(label, { isTextBox: true, x, y, w: 0.42, h: 0.42, align: "center", valign: "middle", fontSize: 14, bold: true, color: C.background1, margin: 0 });
 }
+// 제출 전에 팀원 학번·이름을 채운다.
+const TEAM = [["20XXXXXX", "팀원 1"], ["20XXXXXX", "팀원 2"], ["20XXXXXX", "팀원 3"]];
+const GITHUB = "https://github.com/changxeokSong/reinforcement_learning";
+function table(s, rows, o, fontSize = 11) {
+  const head = rows[0].map((t) => ({ text: t, options: { bold: true, color: C.background1, fill: { color: HEX.navy }, fontSize, align: "center" } }));
+  const body = rows.slice(1).map((r) => r.map((t, i) => ({ text: t, options: { fontSize, color: C.text1, fill: { color: HEX.light }, align: i === 0 ? "left" : (o.alignBody || "center"), bold: i === 0 } })));
+  s.addTable([head, ...body], { border: { type: "solid", pt: 1.5, color: "FFFFFF" }, margin: 0.05, valign: "middle", ...o });
+}
+function bullets(s, lines, o) {
+  s.addText(lines.map((t, j) => ({ text: t, options: { bullet: true, breakLine: j < lines.length - 1 } })),
+    { isTextBox: true, fontSize: 12, color: C.text1, paraSpaceAfter: 6, valign: "top", margin: 0, ...o });
+}
 const LEVELS = ["L1", "L2", "L3", "L4", "L5", "L6", "L7", "L8", "L9", "L10"];
 const chartBase = (title) => ({
   showTitle: false, catAxisLabelFontFace: "+mn-lt", valAxisLabelFontFace: "+mn-lt", legendFontFace: "+mn-lt",
@@ -83,6 +95,8 @@ pres.addSection({ title: "시작" });
   txt(s, "레이저 미션", { x: 0.8, y: 1.6, w: 5.8, h: 0.8, fontSize: 40, bold: true, color: C.background1 });
   txt(s, "강화학습과 모방 학습으로\n정책 하나가 10단계를 완주하기까지", { x: 0.8, y: 2.45, w: 5.8, h: 0.95, fontSize: 18, color: C.background1 });
   txt(s, "Unity 3D 환경 직접 제작 · PPO / DQN / SAC · Behavior Cloning / DAgger", { x: 0.8, y: 3.55, w: 5.8, h: 0.35, fontSize: 11, color: "CADCFC" });
+  txt(s, TEAM.map(([id, name]) => `${id} ${name}`).join("   ·   "), { x: 0.5, y: 4.45, w: 9.0, h: 0.3, fontSize: 13, bold: true, color: C.background1 });
+  txt(s, GITHUB, { x: 0.5, y: 4.8, w: 9.0, h: 0.28, fontSize: 11, color: "CADCFC", hyperlink: { url: GITHUB } });
   s.addNotes("알바트로스가 움직이는 레이저를 피해 금고까지 가는 3D 미션을 Unity로 직접 만들고, 강화학습과 모방 학습으로 풀었다. 오늘은 처음 실패부터 최종 완주까지 단계별로 무엇을 확인하고 무엇을 고쳤는지 순서대로 설명한다.");
 }
 
@@ -108,6 +122,31 @@ pres.addSection({ title: "시작" });
   });
 }
 
+// ---------------------------------------------------------------- 2-1. 주제와 목표
+{
+  const s = content("주제와 목표", "시작",
+    "기존 벤치마크 대신 3D 미션 게임을 직접 만들었다. 대결형인 배구와 달리 혼자 푸는 미션형이고, 실패하면 바로 끝나며 보상이 드물다. 단계를 10개로 늘리면서 생긴 문제(망각, 희소 보상, 배치 암기)를 하나씩 확인하고, 강화학습과 모방 학습으로 풀었다. 아래 네 질문에 실험으로 답한다.");
+  card(s, 0.5, 1.1, 4.3, 3.85, HEX.light, "goal card");
+  txt(s, "문제", { x: 0.7, y: 1.22, w: 3.9, h: 0.35, fontSize: 15, bold: true, color: C.accent1 });
+  bullets(s, [
+    "알바트로스가 움직이는 레이저를 피해 금고까지 간다",
+    "1~10단계 캠페인. 단계가 오를수록 레이저 벽·회전 막대·점멸 벽이 늘어난다",
+    "목표: 정책 하나로 1~10단계를 순서대로 완주",
+    "환경은 Unity 6 + ML-Agents로 직접 제작. 알고리즘은 PyTorch로 직접 구현",
+  ], { x: 0.7, y: 1.65, w: 3.95, h: 3.2, fontSize: 12 });
+  const qs = [
+    ["Q1", "같은 조건에서 PPO · Double DQN · 이산 SAC 중 무엇이 잘 배우는가? 비교 기준(스텝, 시간)에 따라 달라지는가?"],
+    ["Q2", "레벨 구성 방식(커리큘럼, 복습, 무작위)과 관측·보상 설계가 성공률을 바꾸는가?"],
+    ["Q3", "정책 하나로 10단계를 못 깨는 원인은 무엇이고, 모방 학습(BC · DAgger)으로 해결되는가?"],
+    ["Q4", "처음 보는 배치에서도 통하는가? 일반화를 막는 것은 무엇인가?"],
+  ];
+  qs.forEach(([k, q], i) => {
+    const y = 1.1 + i * 0.97;
+    stepBadge(s, k, 5.05, y + 0.18, [HEX.blue, HEX.teal, HEX.purple, HEX.orange][i]);
+    txt(s, q, { x: 5.6, y, w: 3.9, h: 0.85, fontSize: 12, valign: "middle" });
+  });
+}
+
 // ---------------------------------------------------------------- 3. 환경
 pres.addSection({ title: "환경" });
 {
@@ -128,6 +167,68 @@ pres.addSection({ title: "환경" });
   ]), { x: 4.7, y: 1.1, w: 4.8, colW: [0.75, 4.05], rowH: 0.62, border: { type: "solid", pt: 1.5, color: "FFFFFF" }, margin: 0.06 });
 }
 
+// ---------------------------------------------------------------- 3-1. 단계 구성
+{
+  const s = content("1~10단계 구성: 장애물이 하나씩 늘어난다", "환경",
+    "단계마다 장애물 조합이 다르다. 캠페인에서는 단계마다 출발 위치, 레이저 위치, 속도, 점멸 타이밍이 다른 배치 4개 중 하나가 나온다. 무작위 배치 모드에서는 판마다 수치를 새로 뽑는다. 모든 단계가 풀 수 있는지 빔 탐색으로 통과 경로를 찾아 실제 게임 행동으로 재생해 확인했다(고정 배치 40/40, 무작위 배치 299/300).");
+  table(s, [
+    ["단계", "레이저 구성", "핵심 기술"],
+    ["1", "고정된 가로 막대 2개", "낮으면 점프, 높으면 슬라이딩"],
+    ["2", "가로 막대 + 좌우로 쓸고 가는 세로 막대 + 앞뒤 이동 막대", "좌우 회피"],
+    ["3", "가로 · 세로 · 회전 · 깜빡이는 막대를 하나씩", "타이밍"],
+    ["4", "무작위 종류 5개, 속도 1.3배", "조합"],
+    ["5", "겹친 레이저 2곳 + 통로가 움직이는 레이저 벽 2곳 + 회전 · 깜빡임", "통로 찾기"],
+    ["6", "반대 위상 이중 벽, 좁은 통로 벽, 잠깐 꺼지는 전폭 벽, 빠른 회전", "정밀한 대기"],
+    ["7", "좁게 움직이는 통로 3곳 + 회전 막대 + 좌우 레이저", "통로 추적"],
+    ["8", "방 전체를 막았다가 열리는 점멸 벽 3곳 (열리는 시간이 다름)", "기다리기"],
+    ["9", "반대로 움직이는 통로 두 쌍 + 이동 막대 + 점멸 벽", "통로 전환"],
+    ["10", "이중 통로, 좁은 통로, 회전 · 좌우 레이저, 시작과 끝의 점멸 벽", "전부"],
+  ], { x: 0.5, y: 1.05, w: 9.0, colW: [0.7, 6.0, 2.3], rowH: 0.36, alignBody: "left" }, 10.5);
+}
+
+// ---------------------------------------------------------------- 3-2. State · 전처리
+{
+  const s = content("State 설계와 전처리: 66개 연속값", "환경",
+    "별도 데이터셋 없이 Unity가 만든 전이로 학습한다. 관측은 방 크기와 이동 속도로 정규화해 대부분 −1~1 범위에 둔다. 레이저는 종류를 원-핫으로 넣고, 선분 전체 대신 에이전트에게 가장 가까운 지점과 그 지점의 속도를 준다. 레이저 수가 단계마다 달라서 가까운 순서(앞쪽 우선)로 5개만 고정 길이로 넣는다. 깜빡이는 레이저는 언제 바뀌는지 모르면 Markov가 아니므로 전환까지 남은 시간을 넣었다. 정책이 레이저 5개만 보므로 엄밀히는 부분 관측이다.");
+  table(s, [
+    ["구분", "값", "개수"],
+    ["자신", "위치 x·z, 속도 x·y·z, 높이, 슬라이딩 남은 비율, 착지 여부, 경과 시간, 레벨, 금고까지 거리", "11"],
+    ["레이저 (× 5)", "종류 원-핫 4, 가장 가까운 지점의 상대 x·높이·상대 z, 그 지점의 속도 x·z, 켜짐, 깜빡임 전환까지 남은 시간", "11 × 5 = 55"],
+  ], { x: 0.5, y: 1.05, w: 9.0, colW: [1.4, 6.3, 1.3], rowH: 0.62, alignBody: "left" }, 11);
+  const pre = [
+    ["정규화", "위치는 방 크기, 속도는 최대 속도로 나눔"],
+    ["고정 길이", "가까운 순서로 레이저 5개. 부족하면 0으로 채움"],
+    ["Markov 보완", "깜빡임 전환까지 남은 시간, 경과 시간 추가"],
+    ["검증", "관측 설계 vs 원시 선분 좌표 비교 (X3)"],
+  ];
+  pre.forEach(([h, b], i) => {
+    const x = 0.5 + i * 2.27;
+    card(s, x, 3.2, 2.12, 1.7, HEX.light, "pre " + h);
+    txt(s, h, { x: x + 0.12, y: 3.3, w: 1.9, h: 0.35, fontSize: 13, bold: true, color: C.accent3 });
+    txt(s, b, { x: x + 0.12, y: 3.7, w: 1.9, h: 1.1, fontSize: 11 });
+  });
+}
+
+// ---------------------------------------------------------------- 3-3. Action · Reward
+{
+  const s = content("Action · Reward · 종료 조건", "환경",
+    "행동은 이산 27개로 세 알고리즘이 같은 행동 공간을 쓴다. 보상은 도착 +1, 실패 −1이 핵심이고, 매 결정 −0.01 시간 벌점과 금고 쪽으로 다가간 거리 보상(출발부터 도착까지 합 0.5)을 더했다. 할인율 0.99에서 반감 시간은 약 6.9초이고, 성공 경로는 5~12초라서 도착 보상이 충분히 앞까지 전달된다. 20초 시간 초과는 게임 규칙이라 terminated로 처리하고 −1을 준다. 외부 중단만 truncated다.");
+  card(s, 0.5, 1.1, 4.35, 1.75, HEX.light, "action card");
+  txt(s, "Action: 이산 27개", { x: 0.7, y: 1.2, w: 4.0, h: 0.35, fontSize: 14, bold: true, color: C.accent3 });
+  txt(s, "좌우 3 × 앞뒤 3 × (없음 / 점프 / 슬라이딩) 3\n결정 한 번 = 시뮬레이션 0.1초\n슬라이딩은 한 번 누르면 0.6초 지속 (탐험으로 찾기 쉽게)", { x: 0.7, y: 1.6, w: 4.0, h: 1.2, fontSize: 11 });
+  card(s, 0.5, 3.05, 4.35, 1.9, HEX.light, "done card");
+  txt(s, "종료", { x: 0.7, y: 3.15, w: 4.0, h: 0.35, fontSize: 14, bold: true, color: C.accent3 });
+  txt(s, "terminated: 금고 도착 · 레이저 접촉 · 20초 경과\ntruncated: 외부 평가 한도로 중단 (ML-Agents interrupted)\nγ = 0.99 → 5초 뒤 0.61, 10초 뒤 0.37", { x: 0.7, y: 3.55, w: 4.0, h: 1.3, fontSize: 11 });
+  table(s, [
+    ["보상 항목", "값", "이유"],
+    ["금고 도착", "+1", "목표"],
+    ["레이저 접촉", "−1", "실패"],
+    ["시간 초과 (20초)", "−1", "0점이면 레이저 앞에서 버티는 게 안전해진다"],
+    ["매 결정", "−0.01", "먼 −1은 할인으로 거의 0이라 버티기를 막지 못했다"],
+    ["다가간 거리", "합 0.5", "출발 직후 학습 신호 (X4에서 제거해도 비슷)"],
+  ], { x: 5.1, y: 1.1, w: 4.4, colW: [1.25, 0.7, 2.45], rowH: 0.6, alignBody: "left" }, 10.5);
+}
+
 // ---------------------------------------------------------------- 4. 학습이 되게 만들기
 {
   const s = content("처음에는 성공률 0: 원인을 하나씩 찾아 고쳤다", "환경",
@@ -143,6 +244,106 @@ pres.addSection({ title: "환경" });
   s.addTable([head, ...rows], { x: 0.5, y: 1.1, w: 9.0, colW: [1.7, 3.0, 3.1, 1.2], rowH: 0.5, border: { type: "solid", pt: 1.5, color: "FFFFFF" }, margin: 0.07, valign: "middle" });
   card(s, 0.5, 4.3, 9.0, 0.72, "FCE8E8", "lesson card");
   txt(s, "seed 3개로 다시 비교하니 관측·보상 수정 효과는 대부분 신뢰구간 안이었다. 개선은 반드시 여러 seed로 다시 확인한다 (10장).", { x: 0.7, y: 4.4, w: 8.6, h: 0.55, fontSize: 12, color: C.text1, valign: "middle" });
+}
+
+// ---------------------------------------------------------------- 4-1. 알고리즘
+pres.addSection({ title: "알고리즘 · 실험 설계" });
+{
+  const s = content("직접 구현한 세 알고리즘", "알고리즘 · 실험 설계",
+    "세 알고리즘 모두 라이브러리 없이 PyTorch로 직접 구현했다(algos/ppo.py, dqn.py, sac.py). 배구와 레이저가 같은 코드를 쓴다. 정책 기반 on-policy(PPO), 가치 기반 off-policy(DQN), 최대 엔트로피 off-policy(SAC)로 성격이 다른 세 가지를 골랐다. SAC는 원래 연속 행동용이라, 행동이 27개뿐인 점을 이용해 정책 기댓값을 샘플 대신 정확한 합으로 계산하는 이산 버전을 썼다. 레이저에서는 Q값 발산 때문에 기울기 상한과 Bellman 목표값 범위 제한(±3)을 옵션으로 추가했다.");
+  const cols = [
+    ["PPO", "on-policy · 정책 경사", HEX.blue, ["clipped surrogate (ε = 0.2)", "GAE (λ = 0.95)로 advantage 추정", "16개 방에서 256스텝씩 모아 4 epoch 갱신", "엔트로피 보너스 0.01, 학습률 선형 감소"]],
+    ["Double DQN", "off-policy · 가치 기반", HEX.gray, ["온라인 망이 행동 선택, 타깃 망이 평가 (과대추정 완화)", "재생 버퍼 50만, soft target τ = 0.005", "Huber 손실", "ε-greedy 1.0 → 0.05 (전체의 30%)"]],
+    ["이산 SAC", "off-policy · 최대 엔트로피", HEX.teal, ["Q 두 개 중 작은 값 사용 (twin Q)", "정책 기댓값을 27개 행동에 대해 정확히 합산", "목표 엔트로피 = 0.3 × ln 27, α 자동 조절", "레이저 전용: 기울기 상한 10, 목표값 ±3"]],
+  ];
+  cols.forEach(([h, sub, color, lines], i) => {
+    const x = 0.5 + i * 3.05;
+    card(s, x, 1.1, 2.9, 3.85, HEX.light, h + " card");
+    s.addShape(pres.shapes.RECTANGLE, { x, y: 1.1, w: 2.9, h: 0.08, fill: { color }, line: { color }, objectName: h + " bar" });
+    txt(s, h, { x: x + 0.18, y: 1.3, w: 2.6, h: 0.4, fontSize: 17, bold: true, color });
+    txt(s, sub, { x: x + 0.18, y: 1.72, w: 2.6, h: 0.3, fontSize: 11, color: "555B66" });
+    bullets(s, lines, { x: x + 0.18, y: 2.15, w: 2.6, h: 2.7, fontSize: 11.5 });
+  });
+}
+
+// ---------------------------------------------------------------- 4-2. 하이퍼파라미터
+{
+  const s = content("하이퍼파라미터: 공통 값은 같게", "알고리즘 · 실험 설계",
+    "비교의 공정성을 위해 할인율, 학습률, 신경망 크기, 환경 설정, 학습 스텝, 평가 방법을 세 알고리즘에 똑같이 맞췄다. 알고리즘 고유 설정은 각 논문의 기본값에 가깝게 두었다. 모든 값은 실행마다 config.json에 저장된다. 레이저 전용으로 바꾼 것은 SAC의 기울기 상한과 목표값 범위뿐이고, 이것도 X6·X7에서 따로 비교했다.");
+  table(s, [
+    ["공통", "값"],
+    ["할인율 γ", "0.99"],
+    ["학습률", "3 × 10⁻⁴ (Adam)"],
+    ["신경망", "66 → 256 → 256 → 27"],
+    ["병렬 방", "16개 (한 Unity 프로세스)"],
+    ["학습 스텝", "1~4단계 400만, 10단계 1,200만"],
+    ["커리큘럼", "최근 300판 성공률 0.8 이상이면 승급, 레벨 2부터 50% 복습"],
+  ], { x: 0.5, y: 1.05, w: 4.3, colW: [1.3, 3.0], rowH: 0.47, alignBody: "left" }, 11);
+  table(s, [
+    ["알고리즘", "고유 설정"],
+    ["PPO", "n_steps 256 · epoch 4 · minibatch 4 · clip 0.2 · GAE λ 0.95 · 엔트로피 0.01 · value 0.5 · grad norm 0.5"],
+    ["Double DQN", "버퍼 50만 · batch 256 · 4스텝마다 갱신 · τ 0.005 · ε 1.0→0.05 (30%) · 시작 1만 스텝"],
+    ["이산 SAC", "버퍼 50만 · batch 256 · 4스텝마다 갱신 · τ 0.005 · 목표 엔트로피 0.3·ln27 · 초기 α 0.2 · 기울기 상한 10 · 목표값 ±3"],
+  ], { x: 5.0, y: 1.05, w: 4.5, colW: [1.15, 3.35], rowH: 0.8, alignBody: "left" }, 10.5);
+}
+
+// ---------------------------------------------------------------- 4-3. 구현 검증
+{
+  const s = content("구현 검증: 알고리즘과 환경을 따로 확인", "알고리즘 · 실험 설계",
+    "학습이 안 될 때 알고리즘 버그인지 환경 문제인지 가르기 위해 둘을 따로 검증했다. 알고리즘은 CartPole-v1에서 세 개 모두 평균 리턴 195 이상을 확인했다. 환경은 규칙 정책 기준선, 통과 경로 탐색, 빌드 회귀 검사로 확인했다. 실험 실행기는 Unity 빌드 전체의 SHA-256 지문으로 빌드를 식별하고, 평가 때 Unity가 돌려준 실제 레벨을 검사한다. 이 검사 덕분에 레벨 5 요청이 레벨 4로 실행되던 X8 초기 오류를 찾아 결과에서 뺐다.");
+  const items = [
+    ["알고리즘", HEX.blue, ["CartPole-v1: PPO · DQN · SAC 모두 평균 리턴 195 이상 (tests/check_algos.py)", "무작위 행동 기준선: 모든 단계 0%"]],
+    ["환경", HEX.teal, ["1단계 규칙 정책(낮으면 점프, 높으면 슬라이딩) 100% 통과", "빔 탐색으로 단계마다 통과 경로 확인: 고정 배치 40/40, 무작위 배치 299/300", "잠재함수 보상 · 종료 플래그 계산 확인 (tests/check_laser.py)"]],
+    ["빌드 · 재현", HEX.purple, ["코드 정리 전후 28,160개 전이에서 관측 · 보상 · 종료가 일치", "빌드 내용 지문(SHA-256)으로 실험마다 빌드 기록", "평가 시 실제 레벨 확인 → X8 초기 레벨 오류 발견 · 제외"]],
+  ];
+  items.forEach(([h, color, lines], i) => {
+    const x = 0.5 + i * 3.05;
+    card(s, x, 1.1, 2.9, 3.85, HEX.light, h + " card");
+    txt(s, h, { x: x + 0.18, y: 1.25, w: 2.6, h: 0.4, fontSize: 16, bold: true, color });
+    bullets(s, lines, { x: x + 0.18, y: 1.8, w: 2.6, h: 3.05, fontSize: 11.5 });
+  });
+}
+
+// ---------------------------------------------------------------- 4-4. 실험 셋업 · 평가 지표
+{
+  const s = content("실험 셋업과 평가 지표", "알고리즘 · 실험 설계",
+    "통계 단위는 학습 seed다. 한 모델의 200판은 그 seed의 성공률 하나를 정확히 재는 데 쓰고, 신뢰구간은 seed 3개의 값으로 t 분포를 써서 계산한다. 그래서 200판을 표본 200개로 세지 않는다. 평가 환경 seed는 학습과 검증(선생님 고르기)에 쓰지 않은 값이다. 학습 시간은 같은 PC에서 여러 실행을 동시에 돌린 기준이라, 절대값보다 상대 비교로 본다.");
+  table(s, [
+    ["항목", "설정"],
+    ["PC", "Intel i7-13700KF · RAM 64GB · GTX 1660 (학습은 CPU)"],
+    ["소프트웨어", "Unity 6000.0 · ML-Agents · Python 3.10 · PyTorch 2"],
+    ["학습 seed", "설정마다 0 · 1 · 2"],
+    ["평가 seed", "학습 · 검증과 분리 (예: 검증 77000, 평가 123456)"],
+    ["평가 판 수", "레벨마다 200판, 가장 점수 높은 행동"],
+    ["동시 실행", "실험 6~8개를 동시에"],
+  ], { x: 0.5, y: 1.05, w: 4.6, colW: [1.25, 3.35], rowH: 0.47, alignBody: "left" }, 10.5);
+  table(s, [
+    ["지표", "정의"],
+    ["단계별 성공률", "금고 도착 판 / 200판"],
+    ["1~10단계 평균", "단계별 성공률의 평균"],
+    ["10단계 완주율", "순차 캠페인 200회 중 완주. 단계당 최대 3번 (또는 1번) 시도"],
+    ["실패 유형", "충돌 · 시간 초과 비율"],
+    ["95% 신뢰구간", "seed별 값의 평균 ± t(0.975, 2) · s/√3"],
+  ], { x: 5.3, y: 1.05, w: 4.2, colW: [1.35, 2.85], rowH: 0.55, alignBody: "left" }, 10.5);
+}
+
+// ---------------------------------------------------------------- 4-5. 실험 목록
+{
+  const s = content("실험 목록", "알고리즘 · 실험 설계",
+    "실험은 질문 순서대로 진행했다. X1~X7은 1~4단계에서 알고리즘과 설계를 비교했고, X8~X13은 단계를 10개로 늘리며 생긴 문제를 다뤘다. 이후 모방 학습, 일반화, 6단계 설계 수정과 충돌 예측을 실험했다. 모든 설정은 seed 3개다. 명령 한 줄로 다시 돌릴 수 있고(laser.experiments), 결과 표와 그래프는 laser.report가 만든다.");
+  table(s, [
+    ["실험", "비교", "질문"],
+    ["X1", "PPO vs Double DQN vs SAC (1~4단계, 400만 스텝)", "Q1"],
+    ["X2", "커리큘럼 / 커리큘럼 + 복습 / 레벨 무작위 / 처음부터 레벨 4", "Q2"],
+    ["X3 · X4", "관측: 설계한 특징 vs 원시 좌표 · 보상: 시간 벌점, 다가가기 보상 제거", "Q2"],
+    ["X5", "PPO 학습량 400만 vs 2,000만 스텝 (같은 시간 비교)", "Q1"],
+    ["X6 · X7", "SAC 안정화: 기울기 상한 · Bellman 목표값 범위", "Q1"],
+    ["X8 ~ X12", "레벨 5 · 6 · 10단계로 확장, 세 알고리즘 1,200만 스텝", "Q3"],
+    ["X13", "PPO 정책 하나에 모방 학습과 같은 예산 5,250만 스텝", "Q3"],
+    ["모방 학습", "BC vs DAgger · 학생 크기 64 / 256 / 512 · 선생님 PPO vs SAC · 시범", "Q3"],
+    ["일반화", "고정 배치 4개 vs 판마다 새 배치", "Q4"],
+    ["새 빌드", "세 알고리즘 재비교 (무작위 vs 커리큘럼) · 6단계 설계 수정 · 충돌 예측", "Q1 · Q4"],
+  ], { x: 0.5, y: 1.05, w: 9.0, colW: [1.3, 6.7, 1.0], rowH: 0.36, alignBody: "left" }, 10.5);
 }
 
 // ---------------------------------------------------------------- 5. 알고리즘 비교 (1~4단계)
@@ -162,6 +363,29 @@ pres.addSection({ title: "강화학습" });
   txt(s, "같은 스텝: SAC가 높다\n같은 시간: PPO가 효율적이다\n배구 실험(2인 대결)과 같은 결론", { x: 6.55, y: 3.5, w: 2.8, h: 1.3, fontSize: 11 });
 }
 
+// ---------------------------------------------------------------- 5-1. X2~X4
+{
+  const s = content("X2~X4: 학습 방식 · 관측 · 보상", "강화학습",
+    "PPO, 400만 스텝, seed 3개, 레벨 1~4 평균 성공률 ± 95% 신뢰구간. 커리큘럼은 레벨 3을 오래 연습하는 동안 레벨 1을 잊었다(0.71). 레벨을 무작위로 섞으면 0.66으로 가장 좋았고, 처음부터 레벨 4만 하면 성공 경험이 드물어 0.42였다. 관측과 보상 수정은 설계할 때 큰 효과로 보였지만 seed 3개로 다시 재면 차이가 신뢰구간 안이었다.");
+  s.addImage({ path: FIG + "laser_x2_training.png", x: 0.5, y: 1.05, w: 5.6, h: 1.94, objectName: "x2 figure" });
+  table(s, [
+    ["설정 (PPO)", "1~4단계 평균"],
+    ["레벨 무작위", "0.66 ± 0.31"],
+    ["커리큘럼 + 복습", "0.57 ± 0.02"],
+    ["커리큘럼 (기본)", "0.53 ± 0.06"],
+    ["처음부터 레벨 4", "0.42 ± 0.17"],
+    ["원시 좌표 관측 (X3)", "0.57 ± 0.20"],
+    ["시간 벌점 없음 (X4)", "0.59 ± 0.34"],
+    ["다가가기 보상 없음 (X4)", "0.66 ± 0.23"],
+  ], { x: 6.35, y: 1.05, w: 3.15, colW: [1.85, 1.3], rowH: 0.42 }, 10.5);
+  card(s, 0.5, 3.2, 5.6, 1.75, HEX.light, "x2 lesson");
+  bullets(s, [
+    "커리큘럼의 망각: 레벨 3을 연습하는 동안 레벨 1이 0.71로 떨어짐. 복습을 넣으면 회복하지만 어려운 레벨 연습이 줄어 평균은 비슷",
+    "처음부터 어려운 레벨: 성공 경험이 드물어 학습 신호가 약함 (희소 보상)",
+    "관측 · 보상 수정 효과는 신뢰구간 안. 20초 시간 초과 −1만으로도 버티기가 막힘",
+  ], { x: 0.7, y: 3.3, w: 5.2, h: 1.6, fontSize: 11 });
+}
+
 // ---------------------------------------------------------------- 6. Step 1: 10단계, 정책 하나
 {
   const s = content("1단계: 정책 하나로는 10단계 완주 0번", "강화학습",
@@ -176,6 +400,28 @@ pres.addSection({ title: "강화학습" });
   txt(s, "0 / 600", { x: 7.25, y: 1.45, w: 2.15, h: 0.75, fontSize: 32, bold: true, color: C.accent1, align: "center", valign: "middle" });
   txt(s, "10단계 완주\n(세 알고리즘 모두)", { x: 7.25, y: 2.25, w: 2.15, h: 0.7, fontSize: 12, align: "center" });
   txt(s, "단계별 성공률, seed 3개 평균.\n1,200만 스텝, 레벨당 200판 평가", { x: 7.15, y: 3.45, w: 2.35, h: 0.8, fontSize: 10, color: "555B66" });
+  txt(s, "학습 시간 (1,200만 스텝): PPO 50분 · DQN 4.3시간 · SAC 10.7시간", { x: 7.15, y: 4.25, w: 2.35, h: 0.7, fontSize: 10, bold: true, color: C.text2 });
+}
+
+// ---------------------------------------------------------------- 6-1. 새 빌드 재비교
+{
+  const s = content("최종 빌드에서 세 알고리즘 재비교", "강화학습",
+    "코드를 정리한 최종 빌드에서 세 알고리즘을 처음부터 다시 학습했다. 시드당 105만 스텝, 은닉층 128, 판마다 새 배치. 무작위 레벨과, 모든 알고리즘이 같은 스텝에서 레벨을 여는 고정 커리큘럼(레벨 2부터 50% 복습)을 비교했다. 커리큘럼이 PPO와 SAC를 각각 약 6%p, 8%p 올렸고 개선은 1~4단계에서 나왔다. SAC와 PPO의 차이는 같은 seed끼리 짝지은 95% 신뢰구간이 −7.5~+11.7%p라 순위를 정할 수 없다. 행동을 보면 1단계 낮은 빔에서 PPO는 80%의 결정에서 슬라이딩을 눌러 실패했고, SAC는 점프를 75% 골랐다.");
+  const data = [
+    { name: "무작위 레벨", labels: ["PPO", "SAC", "Double DQN", "무작위 행동"], values: [7.95, 8.12, 0.83, 0] },
+    { name: "커리큘럼", labels: ["PPO", "SAC", "Double DQN", "무작위 행동"], values: [13.72, 15.80, 1.20, 0] },
+  ];
+  s.addChart(pres.charts.BAR, data, { ...chartBase(), valAxisMaxVal: 25, valAxisMajorUnit: 5, x: 0.5, y: 1.05, w: 5.3, h: 3.9, barDir: "col", chartColors: [HEX.gray, HEX.teal],
+    showValue: true, dataLabelPosition: "outEnd", dataLabelFormatCode: "0.0\"%\"", dataLabelFontSize: 10, dataLabelColor: "1B1B2A", dataLabelFontFace: "+mn-lt" });
+  card(s, 6.05, 1.1, 3.45, 1.15, HEX.light, "rank card");
+  txt(s, "1~10단계 평균 (seed 3개)", { x: 6.2, y: 1.18, w: 3.2, h: 0.3, fontSize: 12, bold: true, color: C.accent3 });
+  txt(s, "SAC 15.8 ± 7.5 · PPO 13.7 ± 7.9 · DQN 1.2 ± 4.3 (%, 커리큘럼). 6~10단계는 모두 0", { x: 6.2, y: 1.5, w: 3.2, h: 0.7, fontSize: 10.5 });
+  card(s, 6.05, 2.4, 3.45, 1.2, HEX.light, "behavior card");
+  txt(s, "차이는 1단계 낮은 빔에서", { x: 6.2, y: 2.48, w: 3.2, h: 0.3, fontSize: 12, bold: true, color: C.accent2 });
+  txt(s, "낮은 빔은 점프가 정답. PPO 슬라이딩 80.6% → 36/222 통과, SAC 점프 75.5% → 100/222", { x: 6.2, y: 2.8, w: 3.2, h: 0.75, fontSize: 10.5 });
+  card(s, 6.05, 3.75, 3.45, 1.2, "FCE8E8", "dqn card");
+  txt(s, "DQN은 시간 초과", { x: 6.2, y: 3.83, w: 3.2, h: 0.3, fontSize: 12, bold: true, color: C.accent1 });
+  txt(s, "1단계 시간 초과 80.7%. 후진 명령 34.6%로 출발선 근처에 머묾. ε가 5%로 줄어든 뒤 높은 단계가 열림", { x: 6.2, y: 4.15, w: 3.2, h: 0.75, fontSize: 10.5 });
 }
 
 // ---------------------------------------------------------------- 7. Step 2: 망각
@@ -320,6 +566,47 @@ pres.addSection({ title: "모방 학습" });
   txt(s, "5단계 선생님 PPO 80% → SAC 95%로 바꾸자 학생 5단계 78% → 63%. 행동 일치율: PPO 단계 93~99%, SAC 단계 71~93%", { x: 5.55, y: 3.55, w: 3.8, h: 1.3, fontSize: 11 });
 }
 
+// ---------------------------------------------------------------- 13-3. 6단계 설계 수정
+pres.addSection({ title: "6단계" });
+{
+  const s = content("게임 6단계: 병목 측정과 설계 수정", "6단계",
+    "새 배치에서 학생의 6단계는 약 20%로 남았다. 측정해 보니 폭 1.10m 통로에서 에이전트 반경과 벽 두께를 빼면 중심이 지나갈 범위가 0.38m뿐이었고, 반대 위상 이중벽 사이의 대기 공간은 가장 좁은 배치에서 0.228m였다. 이중벽 간격을 1.44m로, 좁은 통로의 유효 폭을 0.64m로 넓혔다. 수정 전후 모두 통과 경로는 생성 배치 60개 중 59개에서 찾았다. 학생 가중치는 고정하고 같은 평가 seed로 비교했다. 환경을 바꾼 것이므로 기존 결과와는 별도 조건으로 기록했다.");
+  table(s, [
+    ["평가 환경 (DAgger 학생, 가중치 고정)", "새 배치 6단계", "새 배치 10단계 완주"],
+    ["기존 설계", "17.5% ± 3.7%p", "253 / 600 (42.2%)"],
+    ["간격 · 폭 확대", "29.0% ± 7.8%p", "352 / 600 (58.7%)"],
+    ["+ 좁은 통로 속도 제한", "31.2% ± 7.1%p", "386 / 600 (64.3%)"],
+  ], { x: 0.5, y: 1.1, w: 9.0, colW: [4.0, 2.3, 2.7], rowH: 0.5 }, 12);
+  [["0.38m → 0.64m", "좁은 통로에서 중심이 지나갈 수 있는 폭"], ["0.228m → 0.568m", "이중벽 사이 가장 좁은 대기 깊이"], ["59 / 60", "수정 전후 모두 통과 경로가 있는 배치"]].forEach(([big, small], i) => {
+    const x = 0.5 + i * 3.05;
+    card(s, x, 3.35, 2.9, 1.55, HEX.light, "stat6 " + i);
+    txt(s, big, { x: x + 0.1, y: 3.45, w: 2.7, h: 0.6, fontSize: 20, bold: true, color: C.accent3, align: "center", valign: "middle" });
+    txt(s, small, { x: x + 0.1, y: 4.1, w: 2.7, h: 0.7, fontSize: 11, align: "center" });
+  });
+}
+
+// ---------------------------------------------------------------- 13-4. 충돌 예측
+{
+  const s = content("0.2초 충돌 예측으로 완주 99.8%", "6단계",
+    "남은 실패 427회는 모두 충돌이었다. 그래서 행동을 고를 때 Unity가 방 상태를 복사해 각 행동을 0.2초 앞까지 시뮬레이션하고, 충돌하는 행동을 후보에서 뺐다(행동 마스크). 학습된 정책은 그대로 두고 실행할 때만 적용한다. 6단계만 쓰면 6단계 단독 89.8%, 4·5·6·9·10단계에 쓰면 완주 99.5%, 7단계까지 넣으면 99.8%였다. 반대로 충돌 예측을 쓰는 선생님을 학생이 따라 하게 하면 28.2%에 그쳤다. 관측만으로는 미래 충돌을 알기 어렵다는 뜻이다. 이 방법은 시뮬레이터를 미리 돌려 볼 수 있다는 가정이 필요하므로, 순수 강화학습 결과와 따로 보고한다.");
+  const data = [
+    { name: "6단계 한 번 시도", labels: ["기존", "6단계만 예측", "4·5·6·9·10 예측", "PPO 추가 학습만", "예측 교사 모방"], values: [28.8, 89.8, 89.8, 34.2, 28.2] },
+    { name: "10단계 완주", labels: ["기존", "6단계만 예측", "4·5·6·9·10 예측", "PPO 추가 학습만", "예측 교사 모방"], values: [59.7, 95.2, 99.5, 67.0, 62.3] },
+  ];
+  s.addChart(pres.charts.BAR, data, { ...chartBase(), x: 0.5, y: 1.05, w: 5.9, h: 3.9, barDir: "col", chartColors: [HEX.orange, HEX.teal],
+    showValue: true, dataLabelPosition: "outEnd", dataLabelFormatCode: "0.0\"%\"", dataLabelFontSize: 9, dataLabelColor: "1B1B2A", dataLabelFontFace: "+mn-lt", catAxisLabelFontSize: 9 });
+  card(s, 6.65, 1.1, 2.85, 1.55, "E3F6F4", "final campaign card");
+  txt(s, "599 / 600", { x: 6.75, y: 1.18, w: 2.65, h: 0.6, fontSize: 28, bold: true, color: C.accent2, align: "center", valign: "middle" });
+  txt(s, "최종 빌드, 새 배치 10단계 완주\n(4·5·6·7·9·10단계 예측, 단계당 3번)", { x: 6.75, y: 1.8, w: 2.65, h: 0.8, fontSize: 10.5, align: "center" });
+  card(s, 6.65, 2.8, 2.85, 2.15, HEX.light, "safety check card");
+  txt(s, "검증", { x: 6.8, y: 2.88, w: 2.6, h: 0.3, fontSize: 12, bold: true, color: C.accent3 });
+  bullets(s, [
+    "예측이 방 상태를 바꾸지 않음: 7,680개 전이 일치",
+    "허용한 행동 2,065개 중 즉시 충돌 0회",
+    "평균 ± 는 seed 3개 기준 95% t 신뢰구간",
+  ], { x: 6.8, y: 3.22, w: 2.6, h: 1.7, fontSize: 10.5 });
+}
+
 // ---------------------------------------------------------------- 14. 배운 점
 pres.addSection({ title: "정리" });
 {
@@ -346,18 +633,55 @@ pres.addSection({ title: "정리" });
 // ---------------------------------------------------------------- 15. 한계
 {
   const s = content("한계와 다음 단계", "정리",
-    "6단계는 모든 방법을 써도 처음 보는 배치에서 약 20%에 머물렀다. 또 고정 배치를 완벽히 깨는 학생과 새 배치에서 잘하는 학생이 서로 다르다. 다음으로는 모방 후 강화학습 미세 조정, SAC 선생님의 확률 분포 전체를 따라 하는 증류, 두 종류 배치를 함께 학습하는 방법을 생각할 수 있다.");
+    "학습된 정책만으로는 새 배치 6단계가 약 30%다. 99.8% 완주는 시뮬레이터를 미리 돌려 보는 충돌 예측에 기대고 있어서, 실제 로봇처럼 미래를 시뮬레이션할 수 없는 환경에는 그대로 쓸 수 없다. 시범도 시뮬레이터 상태를 아는 탐색으로 만들었다. 학습 seed가 3개라 신뢰구간이 넓고, 학습 시간은 동시 실행 조건에 따라 달라진다. 또 고정 배치를 완벽히 깨는 학생과 새 배치에서 잘하는 학생이 서로 다르다. 다음으로는 충돌 예측을 관측이나 보조 과제로 학습에 넣기, 모방 후 강화학습 미세 조정, SAC 선생님의 확률 분포 전체를 따라 하는 증류를 생각할 수 있다.");
   const cols = [
-    ["한계", HEX.red, ["6단계는 처음 보는 배치에서 약 20% (통과 경로는 29/30 존재)", "고정 배치 완주와 새 배치 일반화를 정책 하나로 동시에 달성하지 못함", "시범은 시뮬레이터 상태를 아는 탐색으로 만듦. 실제 환경이라면 사람 시범 필요"]],
-    ["다음 단계", HEX.teal, ["6단계: 학생을 PPO로 미세 조정 (모방 후 강화학습)", "SAC 선생님은 행동 확률 전체를 따라 하도록 증류", "고정·무작위 배치를 함께 학습한 학생 하나"]],
+    ["한계", HEX.red, ["학습된 정책만으로는 새 배치 6단계 약 30%. 99.8% 완주는 실행 시 충돌 예측(시뮬레이터 사용)에 의존", "시범도 시뮬레이터 상태를 아는 탐색으로 만듦. 실제 환경이라면 사람 시범 필요", "학습 seed 3개라 신뢰구간이 넓음. 학습 시간은 동시 실행 조건의 기록", "고정 배치 완주와 새 배치 일반화를 정책 하나로 동시에 달성하지 못함"]],
+    ["다음 단계", HEX.teal, ["충돌 예측을 학습에 넣기: 관측에 추가하거나 보조 과제로 예측", "모방 후 PPO 미세 조정 (특히 6단계)", "SAC 선생님은 행동 확률 전체를 따라 하도록 증류", "seed 5개 이상으로 주요 비교 재확인"]],
   ];
   cols.forEach(([h, color, lines], i) => {
     const x = 0.5 + i * 4.6;
-    card(s, x, 1.15, 4.4, 3.0, HEX.light, h + " card");
+    card(s, x, 1.1, 4.4, 3.85, HEX.light, h + " card");
     txt(s, h, { x: x + 0.25, y: 1.3, w: 3.9, h: 0.4, fontSize: 17, bold: true, color });
     s.addText(lines.map((t, j) => ({ text: t, options: { bullet: true, breakLine: j < lines.length - 1 } })),
-      { isTextBox: true, x: x + 0.25, y: 1.85, w: 3.95, h: 2.15, fontSize: 13, color: C.text1, paraSpaceAfter: 10, valign: "top", margin: 0 });
+      { isTextBox: true, x: x + 0.25, y: 1.8, w: 3.95, h: 3.05, fontSize: 12, color: C.text1, paraSpaceAfter: 10, valign: "top", margin: 0 });
   });
+}
+
+// ---------------------------------------------------------------- 16. 기여
+{
+  const s = content("팀원별 기여", "정리",
+    "제출 전에 팀원별 실제 담당을 채운다. 각 팀원이 직접 구현하거나 검증한 코드와, 작성한 결과 슬라이드를 적는다. 근거는 Git 기록과 docs/code_guide.md의 담당 구분이다.");
+  const roles = [
+    ["A · 환경", HEX.blue, "Unity 레이저 미션 (Room.cs, LaserAgent.cs), MDP 설계, 단계 설계와 통과 경로 검증, 6단계 설계 수정"],
+    ["B · PPO · 모방 학습", HEX.purple, "PPO 구현, 커리큘럼 · 복습, 단계별 선생님, BC · DAgger 증류, 시범"],
+    ["C · DQN · SAC · 평가", HEX.teal, "Double DQN · 이산 SAC 구현과 안정화, 평가 · 통계(신뢰구간), 충돌 예측 평가, 보고서"],
+  ];
+  roles.forEach(([h, color, body], i) => {
+    const x = 0.5 + i * 3.05;
+    card(s, x, 1.1, 2.9, 3.85, HEX.light, h + " card");
+    txt(s, TEAM[i][1] + "  (" + TEAM[i][0] + ")", { x: x + 0.18, y: 1.25, w: 2.6, h: 0.35, fontSize: 13, bold: true, color: C.text2 });
+    txt(s, h, { x: x + 0.18, y: 1.65, w: 2.6, h: 0.35, fontSize: 14, bold: true, color });
+    txt(s, body, { x: x + 0.18, y: 2.1, w: 2.6, h: 2.7, fontSize: 11.5 });
+  });
+}
+
+// ---------------------------------------------------------------- 17. 참고 자료
+{
+  const s = content("참고 자료와 사용 도구", "정리",
+    "알고리즘은 논문을 보고 직접 구현했고 강화학습 라이브러리 코드는 쓰지 않았다. Unity ML-Agents는 Unity와 Python 사이 통신에만 썼다. 코드 작성과 문서 정리에 AI 코딩 도구를 사용했다.");
+  bullets(s, [
+    "Schulman et al., Proximal Policy Optimization Algorithms, 2017",
+    "Schulman et al., High-Dimensional Continuous Control Using Generalized Advantage Estimation, 2016",
+    "van Hasselt et al., Deep Reinforcement Learning with Double Q-learning, AAAI 2016",
+    "Haarnoja et al., Soft Actor-Critic Algorithms and Applications, 2018",
+    "Christodoulou, Soft Actor-Critic for Discrete Action Settings, 2019",
+    "Ross, Gordon, Bagnell, A Reduction of Imitation Learning and Structured Prediction to No-Regret Online Learning (DAgger), AISTATS 2011",
+    "Bengio et al., Curriculum Learning, ICML 2009",
+    "Juliani et al., Unity: A General Platform for Intelligent Agents (ML-Agents), 2018",
+  ], { x: 0.5, y: 1.1, w: 9.0, h: 2.9, fontSize: 11.5 });
+  card(s, 0.5, 4.1, 9.0, 0.85, HEX.light, "tools card");
+  txt(s, "사용 도구: Unity 6000.0 LTS · ML-Agents · Python 3.10 · PyTorch · NumPy · Matplotlib · AI 코딩 도구 (Claude Code, Codex). 코드: " + GITHUB,
+    { x: 0.7, y: 4.18, w: 8.6, h: 0.7, fontSize: 11, valign: "middle" });
 }
 
 (async () => {
