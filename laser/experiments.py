@@ -95,6 +95,48 @@ EXPERIMENTS = {
     # X13 같은 예산 비교: 최종 학생의 선생님들에 쓰인 강화학습 합계(5,250만 스텝)를 정책 하나에 모두 준다
     "x13": [("ppo_random_campaign_52m", "ppo", {**RANDOM_CAMPAIGN, "total_steps": 52_500_000, "eval_interval": 500_000})],
 }
+
+# H 하이퍼파라미터 탐색: 새 빌드 커리큘럼 비교(refactor_curriculum)의 설정에서 값 하나만 바꾼다.
+HP_BASE = {**REFACTOR_STUDIES["refactor_curriculum"]}
+HP_GRID = {
+    "ppo": {"lr": [1e-4, 1e-3], "ent_coef": [0.0, 0.03], "clip": [0.1, 0.3],
+            "gae_lambda": [0.9, 0.99], "n_steps": [128, 512], "epochs": [8], "hidden": [256],
+            "gamma": [0.95, 0.995]},
+    "dqn": {"lr": [1e-4, 1e-3], "train_freq": [4], "eps_fraction": [0.6], "tau": [0.02],
+            "hidden": [256], "target_clip": [3.0], "gamma": [0.95, 0.995]},
+    "sac": {"lr": [1e-4, 1e-3], "target_entropy_ratio": [0.1, 0.5], "train_freq": [4],
+            "hidden": [256], "gamma": [0.95, 0.995]},
+}
+
+
+def hp_tag(key, value):
+    return f"{key}{value:g}" if isinstance(value, float) else f"{key}{value}"
+
+
+for _algo, _grid in HP_GRID.items():
+    EXPERIMENTS[f"hp_{_algo}"] = [
+        (f"{_algo}_{hp_tag(k, v)}", _algo, {**HP_BASE, **REFACTOR_ALGOS[_algo], k: v})
+        for k, values in _grid.items() for v in values]
+# DQN 조합: 탐색 기간·갱신 빈도·목표값 제한을 함께
+EXPERIMENTS["hp_dqn"].append(("dqn_combo", "dqn", {**HP_BASE, **REFACTOR_ALGOS["dqn"], "train_freq": 4,
+                                                   "eps_fraction": 0.6, "target_clip": 3.0}))
+# D DQN 진단: 기준과 조합 설정을 6만 5천 스텝마다 기록해 Q값 추이와 레벨별 결과를 본다
+EXPERIMENTS["dqn_diag"] = [
+    (name, "dqn", {**settings, "eval_interval": 65_536})
+    for name, _, settings in [("dqn_base", "dqn", {**HP_BASE, **REFACTOR_ALGOS["dqn"]}), EXPERIMENTS["hp_dqn"][-1]]]
+# L 학습량: 새 빌드 커리큘럼을 4배 길게 (커리큘럼 마감 스텝도 4배)
+EXPERIMENTS["long"] = [
+    (f"{algo}_4m", algo, {**HP_BASE, **REFACTOR_ALGOS[algo], "total_steps": 4 * 1_048_576,
+                          "eval_interval": 524_288,
+                          "curriculum_deadlines": [4 * d for d in HP_BASE["curriculum_deadlines"]]})
+    for algo in ("ppo", "sac")]
+# C 확인: 탐색에서 고른 설정을 탐색에 쓰지 않은 seed 3~7로 다시 학습한다 (선택 편향 확인).
+# ppo_lr1e-3_16m은 SAC 갱신 4배(시드당 약 1시간)와 비슷한 시간 동안 PPO를 학습한다.
+TUNED = {"ppo": {"lr": 1e-3}, "sac": {"train_freq": 4}, "dqn": {"train_freq": 4, "eps_fraction": 0.6, "target_clip": 3.0}}
+EXPERIMENTS["confirm"] = [(f"{algo}_tuned", algo, {**HP_BASE, **REFACTOR_ALGOS[algo], **cfg}) for algo, cfg in TUNED.items()]
+EXPERIMENTS["confirm"].append(("ppo_tuned_16m", "ppo", {
+    **HP_BASE, **REFACTOR_ALGOS["ppo"], **TUNED["ppo"], "total_steps": 16 * 1_048_576, "eval_interval": 2_097_152,
+    "curriculum_deadlines": [16 * d for d in HP_BASE["curriculum_deadlines"]]}))
 COST = {"ppo": 1, "dqn": 3, "sac": 5}
 
 

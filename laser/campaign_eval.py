@@ -80,12 +80,12 @@ def evaluate_model(policy, common, eval_seed, worker, *, areas=AREAS, rounds=ROU
     return {"by_level": by_level, "campaign": campaign}
 
 
-def finished_models(root, study=None):
+def finished_models(root, study=None, seeds=SEEDS):
     reference = None
     groups = {algo: f"{study}/{algo}" for algo in REFACTOR_ALGOS} if study else GROUPS
     expected = REFACTOR_STUDIES[study] if study else RANDOM_CAMPAIGN
     for algo, group in groups.items():
-        for seed in SEEDS:
+        for seed in seeds:
             run = root / f"{group}_seed{seed}"
             cfg = json.loads((run / "config.json").read_text(encoding="utf-8"))
             model = run / "model.pt"
@@ -131,6 +131,7 @@ def main():
     ap.add_argument("--worker", type=int, default=1026)
     ap.add_argument("--parallel", type=int, default=1)
     ap.add_argument("--study", choices=REFACTOR_STUDIES, help="evaluate the fresh models on procedural layouts")
+    ap.add_argument("--seeds", type=int, nargs="+", default=SEEDS, help="training seeds to evaluate")
     args = ap.parse_args()
     if args.parallel < 1:
         ap.error("--parallel must be positive")
@@ -138,10 +139,10 @@ def main():
         filename = f"{args.study}_results.json" if args.study else "campaign_comparison.json"
         args.out = Path("runs/results/laser") / filename
     torch.set_num_threads(1)
-    models = list(finished_models(args.root, study=args.study))
+    models = list(finished_models(args.root, study=args.study, seeds=args.seeds))
     common = models[0][3]
     if args.study:
-        models.extend(("random", seed, None, common) for seed in SEEDS)
+        models.extend(("random", seed, None, common) for seed in args.seeds)
     with ThreadPoolExecutor(max_workers=args.parallel) as pool:
         tasks = [pool.submit(score_run, *job, args.worker + index, bool(args.study))
                  for index, job in enumerate(models)]

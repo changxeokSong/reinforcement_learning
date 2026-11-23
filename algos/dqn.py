@@ -26,6 +26,7 @@ DEFAULTS = {
     "eps_fraction": 0.3,         # 전체 학습의 앞 30% 동안 epsilon을 줄인다
     "max_grad_norm": 10.0,
     "hidden": 256,
+    "target_clip": None,         # Bellman 목표값을 [-x, x]로 자른다 (SAC와 같은 안정화)
 }
 
 
@@ -81,6 +82,8 @@ class DQN:
             next_a = self.q(next_obs).argmax(-1, keepdim=True)
             next_q = self.q_target(next_obs).gather(1, next_a).squeeze(1)
             target = rew + c["gamma"] * (1.0 - done) * next_q
+            if c.get("target_clip"):
+                target = target.clamp(-c["target_clip"], c["target_clip"])
         q = self.q(obs).gather(1, act.unsqueeze(1)).squeeze(1)
         loss = F.smooth_l1_loss(q, target)
         self.opt.zero_grad()
