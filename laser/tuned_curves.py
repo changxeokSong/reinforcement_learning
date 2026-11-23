@@ -67,7 +67,7 @@ def main():
     a2.set_title("같은 시간")
     for ax in (a1, a2):
         ax.set_ylabel("1~10단계 평균 성공률 (%)")
-        ax.set_ylim(0, 70)
+        ax.set_ylim(0, 100)
         ax.grid(alpha=0.3)
     a1.legend(fontsize=9, loc="upper left", frameon=False)
     a2.legend(fontsize=9, loc="upper left", frameon=False)
