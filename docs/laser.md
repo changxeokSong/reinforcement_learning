@@ -281,10 +281,19 @@ Unity 에디터의 배치 실행에서 `LaserSolvabilityProbe.RunRotorAudit`를 
 .venv-unity\Scripts\python -m laser.watch runs/laser/level1_entropy/control_seed0/model.pt --level 1 --procedural --build runs/laser_game_release/LaserMission.exe --view chase
 .venv-unity\Scripts\python -m laser.policy_followup entropy --build runs/laser_game_release/LaserMission.exe
 .venv-unity\Scripts\python -m laser.policy_followup horizon --build runs/laser_horizon_trial/LaserMission.exe
+.venv-unity\Scripts\python -m laser.policy_followup horizon --build runs/laser_horizon_trial/LaserMission.exe --campaign-attempts 1
 ```
 
 6단계에서 0.3초 예측으로 관전하려면 아래 명령을 실행한다. 실험 빌드가 자동으로 선택된다. 캠페인 관전의 기본 예측은 0.2초다.
 
 ```powershell
 .venv-unity\Scripts\python -m laser.watch runs/laser/retrained_campaign/ppo_seed0/model.pt --level 6 --procedural --level6-design 2 --safety-horizon 2 --stage6-safety-horizon 3 --view chase
+```
+
+3단계에도 0.2초 예측을 켜면 첫 시도 성능이 개선됐다. 아래 캠페인 관전 설정은 그 조합을 사용한다. 평가 명령은 단계당 한 번과 최대 세 번의 시도 결과를 별도 JSON에 저장한다.
+
+```powershell
+.venv-unity\Scripts\python -m laser.watch runs/laser/retrained_campaign/dagger_seed0/model.pt --campaign --procedural --level6-design 2 --level6-policy runs/laser/retrained_campaign/ppo_seed0/model.pt --safety-horizon 2 --safety-levels 3 4 5 6 7 9 10 --view chase
+.venv-unity\Scripts\python -m laser.policy_followup stage3 --build runs/laser_game_release/LaserMission.exe --campaign-attempts 1
+.venv-unity\Scripts\python -m laser.policy_followup stage3 --build runs/laser_game_release/LaserMission.exe
 ```

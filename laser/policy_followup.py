@@ -1,4 +1,4 @@
-"""Evaluate the level 1 PPO entropy ablation and level 6 lookahead on fresh layouts."""
+"""Evaluate policy and collision prediction changes on fresh layouts."""
 
 import argparse
 from concurrent.futures import ThreadPoolExecutor
@@ -9,7 +9,7 @@ from time import perf_counter
 import torch
 
 from algos.common import load_policy
-from laser.action_safety_eval import evaluate_fresh_episodes, evaluate_stage_six
+from laser.action_safety_eval import evaluate_fresh_episodes
 from laser.campaign_eval import AREAS, EPISODE_ATTEMPTS, LEVELS, ROUNDS, evaluate_campaign
 from laser.env import LaserEnv
 from laser.level6_integration import StageSixPolicy
@@ -57,45 +57,63 @@ def evaluate_entropy(args, seed, worker):
 
 
 def evaluate_horizon(args, seed, worker):
+    conditions = [(horizon, SAFETY_STAGES, horizon) for horizon in (2, 3)]
+    return evaluate_safety(args, seed, worker, 6, 115_100, conditions)
+
+
+def evaluate_stage3(args, seed, worker):
+    conditions = [("baseline", SAFETY_STAGES, None),
+                  ("predict_stage3", (3, *SAFETY_STAGES), None)]
+    return evaluate_safety(args, seed, worker, 3, 116_000, conditions)
+
+
+def evaluate_safety(args, seed, worker, level, seed_base, conditions):
     student_path, specialist_path = models(args.root, seed, "both_retrained")
     student, specialist = load_policy(student_path), load_policy(specialist_path)
     campaign_policy = StageSixPolicy(student, specialist)
+    stage_policy = specialist if level == 6 else student
     reports = []
-    for horizon in (2, 3):
+    for condition, safety_stages, stage6_horizon in conditions:
         options = dict(n_areas=AREAS, worker_id=worker, build=args.build, level6_design=2,
-                       level6_safety_steps=2, safety_levels=SAFETY_STAGES, stage6_safety_horizon=horizon)
-        env = LaserEnv(level=6, seed=115_100 + seed, **options)
+                       level6_safety_steps=2, safety_levels=safety_stages, stage6_safety_horizon=stage6_horizon)
+        env = LaserEnv(level=level, seed=seed_base + seed, **options)
         started = perf_counter()
         try:
-            result = evaluate_stage_six(env, specialist, args.rounds, horizon)
+            result = evaluate_fresh_episodes(env, stage_policy, level, args.rounds, require_mask=level in safety_stages)
         finally:
             env.close()
         seconds = perf_counter() - started
-        env = LaserEnv(level=1, seed=115_200 + seed, **options)
+        env = LaserEnv(level=1, seed=seed_base + 100 + seed, **options)
         try:
-            campaign = evaluate_campaign(env, campaign_policy, LEVELS, args.rounds, EPISODE_ATTEMPTS)
+            campaign = evaluate_campaign(env, campaign_policy, LEVELS, args.rounds, args.campaign_attempts)
         finally:
             env.close()
-        print(f"{horizon} steps seed {seed}: L6 {result['success']}/{result['episodes']}; "
+        print(f"{condition} seed {seed}: L{level} {result['success']}/{result['episodes']}; "
               f"campaign {campaign['completed']}/{campaign['campaigns']}", flush=True)
-        reports.append({"condition": horizon, "seed": seed, "stage": result, "stage_seconds": seconds,
+        reports.append({"condition": condition, "seed": seed, "stage_number": level,
+                        "stage": result, "stage_seconds": seconds,
                         "campaign": campaign})
     return reports
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("study", choices=("entropy", "horizon"))
+    studies = {"entropy": evaluate_entropy, "horizon": evaluate_horizon, "stage3": evaluate_stage3}
+    parser.add_argument("study", choices=studies)
     parser.add_argument("--build", required=True, type=Path)
     parser.add_argument("--root", type=Path, default=Path("runs/laser"))
     parser.add_argument("--worker", type=int, default=4000)
     parser.add_argument("--rounds", type=int, default=ROUNDS)
+    parser.add_argument("--campaign-attempts", type=int, choices=range(1, EPISODE_ATTEMPTS + 1))
     args = parser.parse_args()
     if args.rounds < 1:
         parser.error("--rounds must be positive")
+    if args.campaign_attempts is not None and args.study == "entropy":
+        parser.error("--campaign-attempts applies to campaign studies")
+    args.campaign_attempts = args.campaign_attempts or EPISODE_ATTEMPTS
     args.build = args.build.resolve(strict=True)
     torch.set_num_threads(1)
-    evaluate = evaluate_entropy if args.study == "entropy" else evaluate_horizon
+    evaluate = studies[args.study]
     runs = []
     with ThreadPoolExecutor(max_workers=3) as pool:
         futures = [pool.submit(evaluate, args, seed, args.worker + seed) for seed in range(3)]
@@ -104,11 +122,14 @@ def main():
             if len({row["stage"]["start_observations_sha256"] for row in scores}) != 1:
                 raise RuntimeError("Evaluation layouts differed between conditions")
             runs.extend(scores)
-    out = Path("runs/results/laser") / f"policy_followup_{args.study}.json"
+    suffix = "" if args.campaign_attempts == EPISODE_ATTEMPTS else f"_attempts{args.campaign_attempts}"
+    out = Path("runs/results/laser") / f"policy_followup_{args.study}{suffix}.json"
     out.parent.mkdir(parents=True, exist_ok=True)
     temporary = out.with_suffix(".tmp")
-    temporary.write_text(json.dumps({"build": str(args.build), "study": args.study, "runs": runs},
-                                    indent=2) + "\n", encoding="utf-8")
+    report = {"build": str(args.build), "study": args.study, "runs": runs}
+    if args.study != "entropy":
+        report["campaign_attempts_per_stage"] = args.campaign_attempts
+    temporary.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     temporary.replace(out)
 
 
