@@ -171,6 +171,18 @@ python -m laser.report                                                      # �
 .venv-unity\Scripts\python -m laser.record <model.pt> --level 3 --out play.gif   # GIF 녹화
 ```
 
+하이퍼파라미터 탐색과 확인 실험 (최종 빌드, `--build runs/laser_refactor_release/LaserMission.exe`)
+
+```powershell
+.venv-unity\Scripts\python -m laser.experiments hp_ppo hp_dqn hp_sac long dqn_diag --parallel 10   # 32개 설정 × seed 3
+.venv-unity\Scripts\python -m laser.experiments confirm long2 --seeds 3 4 5 6 7 --parallel 10      # 새 seed로 확인, 긴 학습
+python -m laser.hp_report        # 기준 대비 차이와 95% 신뢰구간 → runs/results/laser/hp_sweep.csv
+python -m laser.failure_modes    # 성공 · 충돌 · 시간 초과 분해, DQN Q값 → docs/figures/laser_failure_modes.png
+python -m laser.tuned_curves     # 같은 스텝 · 같은 시간 학습 곡선 → docs/figures/laser_tuned_curves.png
+```
+
+검증 (2026-11-23 실행, 모두 통과): `python -m tests.test_game` 6개, `python -m tests.check_algos` CartPole 3개 알고리즘, `.venv-unity\Scripts\python -m tests.check_laser` 보상 · 종료 플래그.
+
 ![SAC가 레벨 4를 통과하는 장면](docs/figures/laser_sac_level4.gif)
 
 *학습된 SAC가 레벨 4(무작위 레이저 5개, 1.3배 속도)를 통과하는 장면. 높은 레이저는 슬라이딩, 낮은 레이저는 점프로 피한다.*
@@ -257,7 +269,7 @@ GIF는 `python -m laser.record_steps steps` / `full`로 다시 만든다.
 
 ## 보고서
 
-최종 제출 발표 자료는 레이저 미션 [docs/LaserMission_presentation.pptx](docs/LaserMission_presentation.pptx)다. 37장이고 과제 평가 기준 순서(주제·목표 → 환경과 MDP → 알고리즘·하이퍼파라미터·구현 검증 → 실험 셋업·평가 지표 → 결과 → 한계 → 기여·참고 자료)를 따른다. 발표 없이 제출하므로 각 슬라이드에 설명 노트를 달았다. `tools/build_presentation.js`로 다시 만든다(`npm install pptxgenjs@3.12.0`). 제출 전에 이 파일의 `TEAM` 배열에 팀원 학번·이름을 넣고, 기여 슬라이드의 담당 작업을 실제에 맞게 고친다.
+최종 제출 발표 자료는 레이저 미션 [docs/LaserMission_presentation.pptx](docs/LaserMission_presentation.pptx)다. 39장이고 과제 평가 기준 순서(주제·목표 → 환경과 MDP → 알고리즘·하이퍼파라미터·구현 검증 → 실험 셋업·평가 지표 → 결과 → 한계 → 기여·참고 자료)를 따른다. 발표 없이 제출하므로 각 슬라이드에 설명 노트를 달았다. `tools/build_presentation.js`로 다시 만든다(`npm install pptxgenjs@3.12.0`). 제출 전에 이 파일의 `TEAM` 배열에 팀원 학번·이름을 넣고, 기여 슬라이드의 담당 작업을 실제에 맞게 고친다.
 
 ## 팀
 

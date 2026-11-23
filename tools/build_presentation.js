@@ -67,6 +67,8 @@ function stepBadge(s, label, x, y, color) {
 // 제출 전에 팀원 학번·이름을 채운다.
 const TEAM = [["20XXXXXX", "팀원 1"], ["20XXXXXX", "팀원 2"], ["20XXXXXX", "팀원 3"]];
 const GITHUB = "https://github.com/changxeokSong/reinforcement_learning";
+// 순수 강화학습 정책 하나의 최고 기록 (처음 보는 배치, 1~10단계 평균)
+const PURE_RL = "48%";
 function table(s, rows, o, fontSize = 11) {
   const head = rows[0].map((t) => ({ text: t, options: { bold: true, color: C.background1, fill: { color: HEX.navy }, fontSize, align: "center" } }));
   const body = rows.slice(1).map((r) => r.map((t, i) => ({ text: t, options: { fontSize, color: C.text1, fill: { color: HEX.light }, align: i === 0 ? "left" : (o.alignBody || "center"), bold: i === 0 } })));
@@ -103,7 +105,7 @@ pres.addSection({ title: "시작" });
 // ---------------------------------------------------------------- 2. 한 장 요약
 {
   const s = content("한 장 요약: 0번 완주에서 1,200번 완주까지", "시작",
-    "결론부터 말하면, 강화학습 정책 하나로는 10단계를 한 번도 완주하지 못했고, 원인을 하나씩 찾아 고쳐서 마지막에는 정책 하나가 단계당 한 번의 시도만으로 1,200번 모두 완주했다. 이후 슬라이드는 이 다섯 단계를 차례로 설명한다.");
+    "결론부터 말하면, 강화학습 정책 하나로는 고정 배치 10단계를 한 번도 완주하지 못했고, 원인을 하나씩 찾아 고쳐서 마지막에는 정책 하나가 단계당 한 번의 시도만으로 1,200번 모두 완주했다(위 다섯 단계). 아래 세 줄은 그 뒤에 한 일이다. 하이퍼파라미터를 탐색하고 새 seed로 확인해 알고리즘 순위와 순수 강화학습 성능을 다시 쟀고, 처음 보는 배치에서 학습된 정책과 실행 시 충돌 예측의 기여를 나눠 보고했다.");
   const steps = [
     ["1", "강화학습\n정책 하나", "0 / 600", "10단계 완주", HEX.red],
     ["2", "한 단계만\n학습한 PPO", "100%", "그 단계만 · 나머지는 망각", HEX.orange],
@@ -114,11 +116,23 @@ pres.addSection({ title: "시작" });
   const w = 1.66, gap = 0.17;
   steps.forEach(([k, name, big, small, color], i) => {
     const x = 0.5 + i * (w + gap);
-    card(s, x, 1.25, w, 3.45, HEX.light, "step card " + k);
-    stepBadge(s, k, x + 0.15, 1.42, color);
-    txt(s, name, { x: x + 0.15, y: 1.98, w: w - 0.3, h: 0.75, fontSize: 14, bold: true, color: C.text2 });
-    txt(s, big, { x: x + 0.1, y: 3.0, w: w - 0.2, h: 0.6, fontSize: big.length > 9 ? 15 : 20, bold: true, color, align: "center", valign: "middle" });
-    txt(s, small, { x: x + 0.1, y: 3.65, w: w - 0.2, h: 0.75, fontSize: 11, color: "555B66", align: "center" });
+    card(s, x, 1.05, w, 2.7, HEX.light, "step card " + k);
+    stepBadge(s, k, x + 0.15, 1.17, color);
+    txt(s, name, { x: x + 0.15, y: 1.65, w: w - 0.3, h: 0.7, fontSize: 13, bold: true, color: C.text2 });
+    txt(s, big, { x: x + 0.1, y: 2.4, w: w - 0.2, h: 0.55, fontSize: big.length > 9 ? 15 : 20, bold: true, color, align: "center", valign: "middle" });
+    txt(s, small, { x: x + 0.1, y: 2.98, w: w - 0.2, h: 0.7, fontSize: 10.5, color: "555B66", align: "center" });
+  });
+  const facts = [
+    ["알고리즘 비교 (seed 5개)", "기본값: PPO ≈ SAC > DQN\n튜닝 후: SAC 33% > PPO 18% > DQN 5%", HEX.blue],
+    ["순수 강화학습 정책 하나", "하이퍼파라미터 탐색 · 긴 학습\n13% → " + PURE_RL + " (처음 보는 배치 평균)", HEX.purple],
+    ["처음 보는 배치 10단계 완주", "학습된 정책 59.7%\n+ 0.2초 충돌 예측 99.8%", HEX.teal],
+  ];
+  facts.forEach(([h, b, color], i) => {
+    const x = 0.5 + i * 3.05;
+    card(s, x, 3.9, 2.9, 1.05, "FFFFFF", "fact " + i);
+    s.addShape(pres.shapes.RECTANGLE, { x, y: 3.9, w: 0.07, h: 1.05, fill: { color }, line: { color } });
+    txt(s, h, { x: x + 0.18, y: 3.95, w: 2.65, h: 0.3, fontSize: 11.5, bold: true, color });
+    txt(s, b, { x: x + 0.18, y: 4.27, w: 2.65, h: 0.65, fontSize: 10 });
   });
 }
 
@@ -468,6 +482,15 @@ pres.addSection({ title: "강화학습" });
   ], { x: 0.7, y: 3.72, w: 5.2, h: 1.2, fontSize: 10.5 });
 }
 
+// ---------------------------------------------------------------- 6-4b. 학습 곡선
+{
+  const s = content("학습 곡선: 같은 스텝과 같은 시간", "강화학습",
+    "새 seed 3~7의 학습 중 평가(단계마다 20판)다. 띠는 seed 5개의 95% 신뢰구간이다. 왼쪽은 같은 105만 스텝: 튜닝한 SAC가 가장 빨리, 가장 높이 올라간다. DQN은 기본 설정에서 거의 오르지 않는다. 오른쪽은 같은 학습 시간: PPO는 스텝이 빨라 같은 25분이면 튜닝한 SAC와 비슷하고, 시간을 더 주면 계속 올라간다. 즉 스텝당 효율은 SAC, 시간당 효율은 PPO라는 1~4단계 X1·X5의 결론이 10단계 최종 빌드에서도 다시 나왔다. 학습 시간은 같은 PC에서 여러 실행을 동시에 돌린 기록이라 상대 비교로 본다.");
+  s.addImage({ path: FIG + "laser_tuned_curves.png", x: 0.5, y: 1.0, w: 9.0, h: 3.33, objectName: "tuned curves" });
+  txt(s, "스텝당 효율은 SAC, 시간당 효율은 PPO. 1~4단계 결론(X1 · X5)이 10단계 최종 빌드에서도 재현",
+    { x: 0.5, y: 4.45, w: 9.0, h: 0.5, fontSize: 12, bold: true, color: C.text2, align: "center", valign: "middle" });
+}
+
 // ---------------------------------------------------------------- 6-5. 학습 시간
 {
   const s = content("더 오래 학습하면: PPO 1,600만 스텝 47.7%", "강화학습",
@@ -694,6 +717,24 @@ pres.addSection({ title: "정리" });
   card(s, 0.5, 4.25, 9.0, 0.7, "FDF1E6", "honesty card");
   txt(s, "학습된 정책만으로는 59.7%. 99.8%는 미래를 시뮬레이션할 수 있을 때만 가능한 실행 시 보조 결과다.",
     { x: 0.7, y: 4.3, w: 8.6, h: 0.6, fontSize: 11.5, bold: true, color: C.text2, valign: "middle" });
+}
+
+{
+  const s = content("연구 질문에 대한 답", "정리",
+    "처음에 던진 네 질문에 실험 결과로 답한다. 숫자는 모두 해당 슬라이드의 seed 단위 95% 신뢰구간과 같은 조건에서 나왔다.");
+  const qa = [
+    ["Q1", "알고리즘 · 비교 기준", "기본값이면 PPO ≈ SAC > DQN (seed 5개). 튜닝하면 같은 스텝에서 SAC 33% > PPO 18% > DQN 5%. 같은 시간이면 PPO가 따라잡고 더 길게 학습해 " + PURE_RL + ". 비교 기준과 튜닝 여부가 순위를 바꾼다", HEX.blue],
+    ["Q2", "레벨 구성 · 설계", "1~4단계에서는 레벨 무작위, 10단계에서는 커리큘럼 + 복습이 유리 (PPO +5.8%p). γ 0.95는 버티기로 0%, 관측 · 보상 세부 수정은 신뢰구간 안", HEX.teal],
+    ["Q3", "10단계 실패 원인", "망각(한 단계를 배우면 다른 단계를 잊음)과 희소 보상. 단계별 선생님 → DAgger 증류 + 시범으로 고정 배치 1,200 / 1,200", HEX.purple],
+    ["Q4", "처음 보는 배치", "고정 배치 학생은 21% (암기). 판마다 새 배치로 학습해 80%. 남은 6단계 병목은 설계 수정 + 충돌 예측으로 완주 99.8%", HEX.orange],
+  ];
+  qa.forEach(([k, h, body, color], i) => {
+    const y = 1.05 + i * 0.98;
+    card(s, 0.5, y, 9.0, 0.88, HEX.light, "answer " + k);
+    stepBadge(s, k, 0.65, y + 0.23, color);
+    txt(s, h, { x: 1.2, y: y + 0.1, w: 1.9, h: 0.68, fontSize: 12.5, bold: true, color, valign: "middle" });
+    txt(s, body, { x: 3.1, y: y + 0.08, w: 6.25, h: 0.72, fontSize: 11, valign: "middle" });
+  });
 }
 
 {

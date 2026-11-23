@@ -756,6 +756,10 @@ PPO와 SAC의 개선은 새 시드에서 재현됐고 DQN 조합은 재현되지
 
 튜닝한 SAC는 시드당 약 25분, 튜닝한 PPO 1,600만 스텝(커리큘럼 마감 스텝도 16배)은 약 40분 걸렸다(9개 동시 실행). 학습 중 평가(단계당 20판)로 약 25분 시점을 보면 PPO 28~36%, SAC 32~36%로 비슷했다. PPO는 이후에도 올라 최종 47.7 ± 16.9%가 됐다. 6단계 0.8%와 9단계 18.8%가 남은 병목이며, 순차 10단계 완주에는 모방 학습과 충돌 예측이 필요했다.
 
+![같은 스텝과 같은 시간의 학습 곡선](figures/laser_tuned_curves.png)
+
+학습 곡선은 학습 시드 3~7의 학습 중 평가(단계당 20판)이고 띠는 95% t 신뢰구간이다. 같은 스텝에서는 튜닝한 SAC가 가장 높았고, 같은 학습 시간에서는 PPO가 SAC와 비슷하게 올라간 뒤 시간을 더 주면 계속 올라갔다. 1~4단계의 X1·X5에서 본 '스텝당 효율은 SAC, 시간당 효율은 PPO'가 10단계 최종 빌드에서도 나타났다.
+
 ```powershell
 .venv-unity\Scripts\python -m laser.experiments refactor refactor_curriculum --seeds 3 4 --build runs/laser_refactor_release/LaserMission.exe
 .venv-unity\Scripts\python -m laser.campaign_eval --study refactor_curriculum --seeds 3 4 --out runs/results/laser/refactor_curriculum_results_seed34.json

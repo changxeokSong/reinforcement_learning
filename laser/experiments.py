@@ -137,6 +137,15 @@ EXPERIMENTS["confirm"] = [(f"{algo}_tuned", algo, {**HP_BASE, **REFACTOR_ALGOS[a
 EXPERIMENTS["confirm"].append(("ppo_tuned_16m", "ppo", {
     **HP_BASE, **REFACTOR_ALGOS["ppo"], **TUNED["ppo"], "total_steps": 16 * 1_048_576, "eval_interval": 2_097_152,
     "curriculum_deadlines": [16 * d for d in HP_BASE["curriculum_deadlines"]]}))
+# L2 6단계 병목 공략: 튜닝한 설정을 더 오래 (PPO 4,800만 스텝, SAC 420만 스텝 = 갱신 1,600만 번)
+EXPERIMENTS["long2"] = [
+    ("ppo_tuned_48m", "ppo", {**HP_BASE, **REFACTOR_ALGOS["ppo"], **TUNED["ppo"], "total_steps": 48 * 1_048_576,
+                              "eval_interval": 4_194_304,
+                              "curriculum_deadlines": [48 * d for d in HP_BASE["curriculum_deadlines"]]}),
+    ("sac_tuned_4m", "sac", {**HP_BASE, **REFACTOR_ALGOS["sac"], **TUNED["sac"], "total_steps": 4 * 1_048_576,
+                             "eval_interval": 524_288,
+                             "curriculum_deadlines": [4 * d for d in HP_BASE["curriculum_deadlines"]]}),
+]
 COST = {"ppo": 1, "dqn": 3, "sac": 5}
 
 
