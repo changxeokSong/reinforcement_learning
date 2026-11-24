@@ -298,6 +298,23 @@ Unity 에디터의 배치 실행에서 `LaserSolvabilityProbe.RunRotorAudit`를 
 .venv-unity\Scripts\python -m laser.policy_followup stage3 --build runs/laser_game_release/LaserMission.exe
 ```
 
+### 동일 배치 6단계 후속 평가
+
+Unity 6000.0.85f2에서 `LaserBuild.BuildWindows`를 실행하고 `-laser-build-path`에 `runs/laser_paired_release/LaserMission.exe`의 절대 경로를 넣어 평가용 빌드를 만든다. 평가기만 `evaluation_layout_batch`를 보내고, Unity는 배치 번호가 바뀔 때 각 방의 난수 스트림을 초기화한다. 캠페인 라운드와 단계마다 새 번호를 쓰므로, 두 정책의 이전 단계 진행 시간이나 재도전 횟수가 달라도 같은 방의 같은 시도는 같은 배치에서 시작한다. 공통 배치의 시작 관측과 공통 재도전의 시작 관측을 각각 해시로 비교한다.
+
+```powershell
+.venv-unity\Scripts\python -m tests.check_level6 --all-stages --check-safety --safety-horizons 2 3 --check-paired-layouts --reference runs/laser_game_release/LaserMission.exe --candidate runs/laser_paired_release/LaserMission.exe
+.venv-unity\Scripts\python -m laser.policy_followup stage6 --build runs/laser_paired_release/LaserMission.exe --campaign-attempts 1
+.venv-unity\Scripts\python -m laser.policy_followup stage6 --build runs/laser_paired_release/LaserMission.exe
+.venv-unity\Scripts\python -m laser.policy_followup stage6 --build runs/laser_paired_release/LaserMission.exe --eval-seed 150000 --campaign-attempts 1 --out runs/results/laser/policy_followup_stage6_confirm_attempts1.json
+```
+
+평가 JSON은 6단계 단독 실패의 방 번호, 에피소드 번호, 시작 위치, 실패 위치와 직전 행동 마스크를 기록한다. Unity 에디터에서 `LaserSolvabilityProbe.RunStage6FailureAudit`를 실행할 때 `-failure-audit-input`으로 JSON, `-failure-audit-output`으로 CSV의 절대 경로를 지정하면 0.3초 조건에서 시드별 앞선 실패 최대 5건을 찾아 빔 탐색 결과를 검증한다.
+
+```powershell
+.venv-unity\Scripts\python -m laser.watch runs/laser/retrained_campaign/dagger_seed0/model.pt --campaign --procedural --level6-design 2 --level6-policy runs/laser/retrained_campaign/ppo_seed0/model.pt --safety-horizon 2 --safety-levels 3 4 5 6 7 9 10 --stage6-safety-horizon 3 --build runs/laser_paired_release/LaserMission.exe --view chase
+```
+
 ### 충돌 예측 없이 6단계 추가 학습
 
 `laser.experiments long2`의 시드 3~7 체크포인트에서 actor를 불러온다. 학습은 6단계 절차 생성 배치에서 진행한다. 평가는 충돌 예측을 끄고, 6단계 단독 성공률과 10단계 순차 완주율을 같은 학습 시드끼리 비교한다.

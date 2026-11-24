@@ -2,9 +2,11 @@
 
 움직이는 레이저를 피하는 에이전트가 처음 보는 배치에서 10단계를 연속으로 완주할 수 있는지 실험했다. Unity에서 생성한 관측과 행동·보상 기록으로 PPO, Double DQN, 이산 SAC를 학습했다. 같은 PPO 정책을 평가했을 때 단계당 최대 세 번의 시도로 1,000회 중 440회를 완주했고, 실행 시 0.2초 충돌 예측을 적용하면 1,000회를 모두 완주했다.
 
-**보고서**　[PowerPoint 다운로드](https://raw.githubusercontent.com/changxeokSong/reinforcement_learning/main/docs/LaserMission_presentation.pptx) · [GitHub에서 슬라이드 보기](docs/LaserMission_presentation.pdf) · [상세 결과](docs/results.md#레이저-미션-결과)
+**보고서**　[PowerPoint 다운로드](https://raw.githubusercontent.com/changxeokSong/reinforcement_learning/main/docs/LaserMission_presentation.pptx) · [GitHub에서 슬라이드 보기](docs/LaserMission_presentation.pdf) · [실험 요약과 평가 기준](docs/laser_submission.md) · [상세 결과](docs/results.md#레이저-미션-결과)
 
 **실행 자료**　[학습 모델 46개 다운로드](https://github.com/changxeokSong/reinforcement_learning/releases/download/v3.0/laser_final_models.zip) · [Windows 평가 빌드 다운로드](https://github.com/changxeokSong/reinforcement_learning/releases/download/v3.0/laser_windows_eval.zip)
+
+**6단계 후속 실험**　[동일 배치 평가 빌드와 결과 데이터](https://github.com/changxeokSong/reinforcement_learning/releases/tag/v3.1) · [재현 방법](docs/laser.md#동일-배치-6단계-후속-평가)
 
 ### 학습된 정책으로 10단계 관전하기
 
@@ -295,7 +297,7 @@ GIF는 `python -m laser.record_steps steps` / `full`로 다시 만든다.
 
 ## 보고서
 
-최종 제출 발표 자료는 레이저 미션 [docs/LaserMission_presentation.pptx](docs/LaserMission_presentation.pptx)다. 39장이고 과제 평가 기준 순서(주제·목표 → 환경과 MDP → 알고리즘·하이퍼파라미터·구현 검증 → 실험 셋업·평가 지표 → 결과 → 한계 → 기여·참고 자료)를 따른다. 발표 없이 제출하므로 각 슬라이드에 설명 노트를 달았다. `tools/build_presentation.js`로 다시 만든다(`npm install pptxgenjs@3.12.0`). 제출 전에 이 파일의 `TEAM` 배열에 팀원 학번·이름을 넣고, 기여 슬라이드의 담당 작업을 실제에 맞게 고친다.
+최종 제출 발표 자료는 [레이저 미션 PPT](docs/LaserMission_presentation.pptx)다. 41장에 주제·목표, 환경과 MDP, 알고리즘·하이퍼파라미터, 실험 셋업과 평가 지표, 결과, 한계, 기여와 참고 자료를 담았다. 각 슬라이드에 설명 노트를 달았다. 발표 자료는 `npm install --no-save pptxgenjs@3.12.0`을 실행한 뒤 `node tools/build_presentation.js`로 다시 만든다. 제출 전에 이 파일의 `TEAM` 배열에 팀원 학번·이름을 넣고, 기여 슬라이드의 담당 작업을 실제에 맞게 고친다.
 
 ## 팀
 

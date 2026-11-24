@@ -7,11 +7,20 @@ namespace LaserMission
     public partial class Room
     {
         System.Random rng;
+        int evaluationLayoutBatch;
         readonly int[] lastCampaignLayouts = new int[MaxLevel + 1];
 
         public void ResetEpisode()
         {
             var p = Academy.Instance.EnvironmentParameters;
+            if (Campaign == null)
+            {
+                // A new evaluation batch starts a fresh, independent layout stream per room.
+                int batch = Mathf.RoundToInt(p.GetWithDefault("evaluation_layout_batch", 0f));
+                if (batch > 0 && batch != evaluationLayoutBatch)
+                    rng = new System.Random(batch * 1000 + index);
+                evaluationLayoutBatch = batch;
+            }
             var practiceRng = rng;
             int layout = -1;
             if (Campaign != null)

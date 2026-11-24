@@ -132,6 +132,68 @@ public static class LaserSolvabilityProbe
         return false;
     }
 
+    static void VerifyGoalReplay(Room room, State start, State goal)
+    {
+        var actions = new List<int>();
+        for (var state = goal; state.Parent != null; state = state.Parent) actions.Add(state.Action);
+        actions.Reverse();
+        Require(Replay(room, start, actions, 0, -1), "Solvability audit path did not replay");
+    }
+
+    [Serializable] sealed class FailureReport { public FailureRun[] runs; }
+    [Serializable] sealed class FailureRun
+    {
+        public string condition;
+        public int seed, stage_seed;
+        public FailureStage stage;
+    }
+    [Serializable] sealed class FailureStage { public Failure[] failures; }
+    [Serializable] sealed class Failure
+    {
+        public int episode_in_room, room;
+        public float start_x;
+    }
+
+    public static void RunStage6FailureAudit()
+    {
+        var args = Environment.GetCommandLineArgs();
+        int input = Array.IndexOf(args, "-failure-audit-input");
+        int output = Array.IndexOf(args, "-failure-audit-output");
+        Require(input >= 0 && input + 1 < args.Length && output >= 0 && output + 1 < args.Length,
+            "Expected -failure-audit-input and -failure-audit-output paths");
+        var report = JsonUtility.FromJson<FailureReport>(File.ReadAllText(args[input + 1]));
+        var room = new GameObject("Stage 6 failure audit").AddComponent<Room>();
+        var rngField = typeof(Room).GetField("rng", BindingFlags.Instance | BindingFlags.NonPublic);
+        Room.DefaultLevel = 6;
+        Room.DefaultLevel6Design = 2;
+        var rows = new List<string> { "condition,train_seed,room,episode,layout_draw,outcome,goal_seconds" };
+        foreach (var run in report.runs.Where(run => run.condition == "horizon_3"))
+            foreach (var failure in run.stage.failures.OrderBy(f => f.episode_in_room).ThenBy(f => f.room).Take(5))
+            {
+                rngField.SetValue(room, new System.Random(run.stage_seed * 1000 + failure.room));
+                int draw = 0;
+                for (; draw < 64; draw++)
+                {
+                    room.ResetEpisode();
+                    if (Mathf.Abs(room.pos.x - failure.start_x) < 1e-6f) break;
+                }
+                string outcome = "layout_unmatched", seconds = "";
+                if (draw < 64)
+                {
+                    var start = Save(room);
+                    var goal = Find(room, start, 128) ?? Find(room, start, 384) ?? Find(room, start, 1024);
+                    outcome = goal == null ? "path_not_found" : "goal_replayed";
+                    if (goal != null)
+                    {
+                        VerifyGoalReplay(room, start, goal);
+                        seconds = goal.Time.ToString("F3", CultureInfo.InvariantCulture);
+                    }
+                }
+                rows.Add($"{run.condition},{run.seed},{failure.room},{failure.episode_in_room},{draw},{outcome},{seconds}");
+            }
+        File.WriteAllLines(args[output + 1], rows);
+    }
+
     static void CheckRotor(Room room)
     {
         const float tolerance = 0.0001f;
@@ -205,13 +267,7 @@ public static class LaserSolvabilityProbe
                 ResetAuditLayout(room, rngField, stage, layoutSeed, campaign);
                 var start = Save(room);
                 var goal = Find(room, start, 128) ?? Find(room, start, 384) ?? Find(room, start, 1024);
-                if (goal != null)
-                {
-                    var actions = new List<int>();
-                    for (var state = goal; state.Parent != null; state = state.Parent) actions.Add(state.Action);
-                    actions.Reverse();
-                    Require(Replay(room, start, actions, 0, -1), "Rotor audit path did not replay");
-                }
+                if (goal != null) VerifyGoalReplay(room, start, goal);
                 int rotors = room.lasers.Count(laser => laser.kind == LaserKind.Rotor);
                 string seconds = goal == null ? "" : goal.Time.ToString("F3", CultureInfo.InvariantCulture);
                 rows.Add($"{stage},{(campaign ? "campaign" : "procedural")},{layoutSeed},{rotors},{(goal != null ? 1 : 0)},{seconds}");

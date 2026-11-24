@@ -1,6 +1,7 @@
 """X11/X12 최종 모델을 같은 조건에서 레벨별·순차 캠페인으로 평가한다."""
 import argparse
 from concurrent.futures import ThreadPoolExecutor
+import hashlib
 import json
 from pathlib import Path
 
@@ -23,37 +24,62 @@ EPISODE_ATTEMPTS = 3
 AREAS = 10
 ROUNDS = 20
 EVAL_SEED = 20_000
+# Unity receives batch IDs as floats and uses batch * 1000 + room as a signed int seed.
+MAX_LAYOUT_BATCH = 2_000_000
 
 
-def evaluate_campaign(env, policy, levels, rounds, max_attempts):
+def evaluate_campaign(env, policy, levels, rounds, max_attempts, *, layout_seed=None):
     """방마다 독립적으로 성공한 경우에만 다음 단계의 결과를 계산한다."""
     reached = np.zeros(len(levels), dtype=int)
     cleared = np.zeros(len(levels), dtype=int)
-    for _ in range(rounds):
+    start_hashes = {}
+    retry_hashes = {}
+    if layout_seed is not None and not 0 < layout_seed <= MAX_LAYOUT_BATCH - rounds * len(levels):
+        raise ValueError("Layout seed range exceeds the supported Unity batch IDs")
+    for cycle in range(rounds):
         alive = np.ones(env.n, dtype=bool)
         for index, level in enumerate(levels):
             reached[index] += alive.sum()
+            if layout_seed is not None:
+                batch = layout_seed + cycle * len(levels) + index
+                env.set_param("evaluation_layout_batch", batch)
             obs, warmup = env.evaluation_reset(level)
+            if layout_seed is not None:
+                starts = obs.copy()
             attempts_left = alive.astype(int) * max_attempts
             passed = np.zeros(env.n, dtype=bool)
-            while attempts_left.any():
+            while attempts_left.any() or (layout_seed is not None and warmup.any()):
+                preparing = warmup.copy() if layout_seed is not None else None
                 mask = env.action_mask
                 actions = policy.act(obs) if mask is None else policy.act(obs, action_mask=mask)
                 step = env.evaluation_step(actions, warmup)
                 obs = step["obs"]
+                if preparing is not None:
+                    fresh = preparing & ~warmup
+                    starts[fresh] = obs[fresh]
                 for slot, outcome, _ in step["results"]:
                     if attempts_left[slot] > 0:
                         attempts_left[slot] -= 1
                         if outcome == "success":
                             passed[slot] = True
                             attempts_left[slot] = 0
+                        elif layout_seed is not None and attempts_left[slot] > 0:
+                            attempt = max_attempts - attempts_left[slot] + 1
+                            retry_hashes[f"{batch}:{slot}:{attempt}"] = hashlib.sha256(
+                                obs[slot].tobytes()).hexdigest()
             cleared[index] += passed.sum()
+            if layout_seed is not None:
+                start_hashes[batch] = hashlib.sha256(starts.tobytes()).hexdigest()
             alive = passed
             if not alive.any():
                 break
-    return {"reached": reached.tolist(), "cleared": cleared.tolist(),
-            "completed": int(cleared[-1]), "campaigns": rounds * env.n,
-            "completion_rate": float(cleared[-1] / (rounds * env.n))}
+    score = {"reached": reached.tolist(), "cleared": cleared.tolist(),
+             "completed": int(cleared[-1]), "campaigns": rounds * env.n,
+             "completion_rate": float(cleared[-1] / (rounds * env.n))}
+    if layout_seed is not None:
+        score["start_hashes_by_batch"] = start_hashes
+        score["retry_start_hashes"] = retry_hashes
+    return score
 
 
 def evaluation_env(common, seed, worker, areas=AREAS, *, campaign_layouts=True):

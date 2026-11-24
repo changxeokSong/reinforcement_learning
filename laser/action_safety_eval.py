@@ -11,7 +11,7 @@ import torch
 
 from algos.common import load_policy
 from laser.campaign_eval import AREAS, EPISODE_ATTEMPTS, LEVELS, ROUNDS, evaluate_campaign
-from laser.env import OBS_DIM, LaserEnv
+from laser.env import OBS_DIM, TIME_INDEX, LaserEnv
 from laser.level6_integration import StageSixPolicy
 
 
@@ -32,7 +32,8 @@ def evaluate_stage_six(env, policy, rounds, horizon):
     return evaluate_fresh_episodes(env, policy, 6, rounds, require_mask=bool(horizon))
 
 
-def evaluate_fresh_episodes(env, policy, level, rounds, *, require_mask=False, classify_start=None):
+def evaluate_fresh_episodes(env, policy, level, rounds, *, require_mask=False, classify_start=None,
+                            diagnose_failures=False):
     """Score the first consecutive fresh episodes in each room on identical layouts."""
     obs, warmup = env.evaluation_reset(level)
     counts = np.zeros(env.n, dtype=int)
@@ -41,10 +42,14 @@ def evaluate_fresh_episodes(env, policy, level, rounds, *, require_mask=False, c
     outcomes = {"success": 0, "hit": 0, "timeout": 0}
     cohorts = {}
     masked_decisions = 0
+    failures = []
+    previous_masked = np.zeros(env.n, dtype=int)
     while (counts < rounds).any():
         active = counts < rounds
         preparing = warmup.copy()
         mask = env.action_mask
+        if diagnose_failures:
+            blocked = np.zeros(env.n, dtype=int) if mask is None else mask.sum(axis=1)
         if mask is not None:
             masked_decisions += int(mask[active & ~warmup].any(axis=1).sum())
         actions = policy.act(obs) if mask is None else policy.act(obs, action_mask=mask)
@@ -52,9 +57,18 @@ def evaluate_fresh_episodes(env, policy, level, rounds, *, require_mask=False, c
         obs = result["obs"]
         fresh = preparing & ~warmup
         starts[0, fresh] = obs[fresh]
-        for slot, outcome, _ in result["results"]:
+        for slot, outcome, length in result["results"]:
             if active[slot]:
                 outcomes[outcome] += 1
+                if diagnose_failures and outcome != "success":
+                    final = result["final_obs"][slot]
+                    failures.append({"episode_in_room": int(counts[slot]), "room": int(slot),
+                                     "outcome": outcome, "decision": length,
+                                     "action": int(actions[slot]), "blocked_actions": int(blocked[slot]),
+                                     "previous_blocked_actions": int(previous_masked[slot]),
+                                     "start_x": float(starts[counts[slot], slot, 0] * 4),
+                                     "x": float(final[0] * 4), "z": float(final[1] * 10),
+                                     "seconds": float(final[TIME_INDEX] * 20)})
                 if classify_start is not None:
                     cohort = classify_start(starts[counts[slot], slot])
                     tally = cohorts.setdefault(cohort, dict.fromkeys(outcomes, 0))
@@ -62,12 +76,17 @@ def evaluate_fresh_episodes(env, policy, level, rounds, *, require_mask=False, c
                 counts[slot] += 1
                 if counts[slot] < rounds:
                     starts[counts[slot], slot] = obs[slot]
+        if diagnose_failures:
+            previous_masked = blocked
+            previous_masked[obs[:, TIME_INDEX] == 0] = 0
     if require_mask and not masked_decisions:
         raise RuntimeError(f"Unity did not provide collision masks for stage {level}")
     score = {**outcomes, "episodes": rounds * env.n, "masked_decisions": masked_decisions,
              "start_observations_sha256": hashlib.sha256(starts.tobytes()).hexdigest()}
     if classify_start is not None:
         score["cohorts"] = cohorts
+    if diagnose_failures:
+        score["failures"] = failures
     return score
 
 

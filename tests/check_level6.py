@@ -65,12 +65,40 @@ def compare_with_safety(build, horizon, worker, rng):
         control.close()
 
 
+def check_paired_layouts(build, worker):
+    env = LaserEnv(n_areas=8, seed=942, level=6, build=build, worker_id=worker, level6_design=2)
+    try:
+        batch_starts = []
+        for batch in (2000, 2001, 2000):
+            env.set_param("evaluation_layout_batch", batch)
+            obs, warmup = env.evaluation_reset(6)
+            starts = obs.copy()
+            actions = np.full(env.n, 7)
+            for _ in range(201):
+                if not warmup.any():
+                    break
+                preparing = warmup.copy()
+                obs = env.evaluation_step(actions, warmup)["obs"]
+                starts[preparing & ~warmup] = obs[preparing & ~warmup]
+            assert not warmup.any()
+            batch_starts.append(starts)
+            # Advance the RNG independently in every room before requesting another batch.
+            for _ in range(230):
+                env.step(actions)
+        np.testing.assert_array_equal(batch_starts[0], batch_starts[2])
+        assert np.all(np.any(batch_starts[0] != batch_starts[1], axis=1))
+        print("Verified fresh layouts repeat only for the same evaluation batch.")
+    finally:
+        env.close()
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--reference", default=DEFAULT_BUILD, type=Path)
     parser.add_argument("--candidate", required=True, type=Path)
     parser.add_argument("--worker", default=2700, type=int)
     parser.add_argument("--check-safety", action="store_true")
+    parser.add_argument("--check-paired-layouts", action="store_true")
     parser.add_argument("--safety-horizons", type=int, choices=(1, 2, 3), nargs="+", default=(1, 2))
     parser.add_argument("--all-stages", action="store_true", help="compare equivalent builds in all observation modes")
     args = parser.parse_args()
@@ -94,6 +122,8 @@ def main():
     if args.check_safety:
         for horizon in args.safety_horizons:
             compare_with_safety(args.candidate, horizon, args.worker, rng)
+    if args.check_paired_layouts:
+        check_paired_layouts(args.candidate, args.worker)
 
 
 if __name__ == "__main__":
