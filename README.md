@@ -1,12 +1,32 @@
-# 알바트로스 배구: 강화학습 알고리즘 대결
+# 레이저 미션 · 강화학습 기말 프로젝트
+
+움직이는 레이저를 피하는 에이전트가 처음 보는 배치에서 10단계를 연속으로 완주할 수 있는지 실험했다. Unity에서 생성한 관측과 행동·보상 기록으로 PPO, Double DQN, 이산 SAC를 학습했다. 같은 PPO 정책을 평가했을 때 단계당 최대 세 번의 시도로 1,000회 중 440회를 완주했고, 실행 시 0.2초 충돌 예측을 적용하면 1,000회를 모두 완주했다.
+
+**보고서**　[PowerPoint 다운로드](https://raw.githubusercontent.com/changxeokSong/reinforcement_learning/main/docs/LaserMission_presentation.pptx) · [GitHub에서 슬라이드 보기](docs/LaserMission_presentation.pdf) · [상세 결과](docs/results.md#레이저-미션-결과)
+
+**실행 자료**　[학습 모델 46개 다운로드](https://github.com/changxeokSong/reinforcement_learning/releases/download/v3.0/laser_final_models.zip) · [Windows 평가 빌드 다운로드](https://github.com/changxeokSong/reinforcement_learning/releases/download/v3.0/laser_windows_eval.zip)
+
+### 학습된 정책으로 10단계 관전하기
+
+Windows에서 이 저장소를 내려받고, 두 ZIP의 `runs` 폴더를 저장소 루트에 풀어 합친다. 아래 PowerShell 명령은 Python 3.10.11 기준이다.
+
+```powershell
+py -3.10 -m venv .venv-unity
+.venv-unity\Scripts\python -m pip install -r requirements-unity.txt --extra-index-url https://download.pytorch.org/whl/cpu
+.venv-unity\Scripts\python -m laser.watch runs/laser/long2/ppo_tuned_48m_seed3/model.pt --campaign --procedural --level6-design 2 --build runs/laser_refactor_release/LaserMission.exe --safety-horizon 2 --safety-levels 4 5 6 7 9 10
+```
+
+같은 명령에서 `--safety-horizon 2 --safety-levels 4 5 6 7 9 10`을 빼면 학습된 정책만 관전한다. 시드 5개로 표의 PPO 결과를 재현하려면 같은 환경에서 `python -m laser.pure_rl_safety --groups ppo_48m`을 실행한다(`.venv-unity` 활성화 필요). [환경·전처리·학습 방법](docs/laser.md) · [알고리즘 구현 안내](docs/code_guide.md)
+
+## 알바트로스 배구
 
 서강대 마스코트 알바트로스를 모티브로 한 2D 1:1 배구 게임을 직접 만들고, 직접 구현한 PPO·DQN·SAC 에이전트를 같은 조건에서 학습시킨 뒤 리그전으로 비교하는 강화학습 기말 프로젝트다.
 
 - 환경: 외부 물리 엔진 없이 직접 구현한 배구 게임 (이동, 점프, 스파이크, 다이빙)
 - 알고리즘: PPO, Double DQN, 이산 SAC를 PyTorch로 직접 구현
-- 비교: 같은 학습 스텝, 같은 상대, 같은 평가. seed 5개와 95% 신뢰구간
+- 비교: 같은 학습 스텝 또는 실제 시간 예산에서 공통 상대와 평가. 설정당 seed 5~10개와 95% 신뢰구간
 
-> 현재 상태: 본 실험(8개 실험, 학습 80회) 완료. 결과는 [실험 결과](docs/results.md)에 있다.
+> E1~E11과 추가 seed를 포함한 학습 155회 완료. 결과는 [실험 결과](docs/results.md)에 있다.
 
 ## 설치
 
@@ -57,16 +77,17 @@ python train.py --algo sac --seed 0 --set total_steps=1000000 action_set=basic
 python -m tests.test_game          # 게임·통계 코드 검증
 python -m tests.check_algos        # 알고리즘 구현 검증 (CartPole)
 
-python -m experiments.final       # 모든 실험 + 리그전 + 그래프·표 (약 5시간 30분)
+python -m experiments.final       # E1~E11과 추가 시드 학습 + 리그전 + 그래프·표
 ```
 
 `experiments.final`은 아래를 차례로 실행한다. 하나씩 돌릴 수도 있다.
 
 ```powershell
-python -m experiments.run e1 e2 e3 e4 e5 e6 e7 e8 --parallel 14   # 학습 (seed 5개씩, 총 80회)
-python -m analysis.league runs/e1 runs/e2 runs/e3 runs/e4 runs/e5 runs/e6 runs/e7 runs/e8 --out runs/results/league
+python -m experiments.run e1 e2 e3 e4 e5 e6 e7 e8 e9 e10 e11 e1@5-9 e8@5-9 --parallel 14
+$runDirs = 1..11 | ForEach-Object { "runs/e$_" }
+python -m analysis.league @runDirs --out runs/results/league
 python -m analysis.report runs/e1 runs/e2 --out runs/results/e2_action_space   # 실험별 그래프와 표
-python -m analysis.dashboard runs/e1 runs/e2 runs/e3 runs/e4 runs/e5 runs/e6 runs/e7 runs/e8   # 대시보드 (html)
+python -m analysis.dashboard @runDirs --league runs/results/league/league.json --out runs/results/dashboard.html
 ```
 
 ## 눈으로 확인하기
@@ -82,14 +103,17 @@ python play.py --left runs/e1/dqn_seed0/model.pt --right runs/e1/ppo_seed0/model
 
 | 실험 | 비교 내용 | 학습 횟수 |
 |---|---|---|
-| e1 | PPO vs DQN vs SAC (확장 행동 18개) | 15 |
+| e1 | PPO vs DQN vs SAC (확장 행동 18개, 설정당 seed 10개) | 30 |
 | e2 | 같은 알고리즘, 기본 행동 6개 (이동·점프만) | 15 |
 | e3 | PPO entropy 계수 0 / 0.03 (0.01은 e1과 공유) | 10 |
 | e4 | PPO 보조 보상 (공을 넘기면 +0.1) | 5 |
-| e5 | PPO 1200만 스텝 (같은 시간 비교) | 5 |
+| e5 | PPO 학습량 확대 (1,200만 스텝) | 5 |
 | e6 | SAC 목표 엔트로피 비율 0.1 / 0.5 (0.3은 e1과 공유) | 10 |
 | e7 | DQN epsilon 감소 구간 0.1 / 0.5 (0.3은 e1과 공유) | 10 |
-| e8 | PPO 학습 상대 중 self-play 비율 0.3 / 0.9 (0.6은 e1과 공유) | 10 |
+| e8 | PPO 학습 상대 중 self-play 비율 0.3 / 0.9 (0.6은 e1과 공유, 설정당 seed 10개) | 20 |
+| e9 | 약 1시간 목표: PPO 1,800만 / SAC 140만 스텝 | 10 |
+| e10 | 약 2시간 목표: PPO 3,600만 / DQN 600만 스텝 | 10 |
+| e11 | PPO·DQN·SAC 학습률 0.0001 / 0.001 (0.0003은 e1과 공유) | 30 |
 
 학습 1회(300만 스텝)에 걸리는 시간은 i7-13700KF에서 14개를 동시에 돌릴 때 PPO 약 10분, DQN 약 56분, SAC 약 2시간이다. 중간에 끊겨도 같은 명령을 다시 실행하면 끝난 것은 건너뛴다.
 
@@ -128,7 +152,7 @@ docs/         계획, 보고서 구성, 실험 결과, 그래프
 
 ## 실험 결과
 
-seed 5개의 평균 ± 95% 신뢰구간이다. 자세한 표와 해석은 [실험 결과](docs/results.md)에 있다.
+초기 E1~E8 결과는 seed 5개의 평균 ± 95% 신뢰구간이다. 추가 시간 예산과 학습률 비교, seed 10개 결과는 [실험 결과](docs/results.md)에 있다.
 
 | 설정 | 어려움 봇 상대 승률 | 리그전 Elo | 학습 시간(분) |
 |---|---|---|---|
@@ -138,10 +162,10 @@ seed 5개의 평균 ± 95% 신뢰구간이다. 자세한 표와 해석은 [실�
 | PPO 1200만 스텝 | 0.63 ± 0.10 | **1245 ± 35** | 35 |
 | SAC 기본 행동 (스파이크·다이빙 없음) | **0.88 ± 0.10** | 1129 ± 64 | 138 |
 
-- 같은 스텝에서는 DQN > SAC > PPO. 같은 시간을 주면 PPO가 가장 강하다.
+- 300만 스텝에서는 DQN의 어려움 봇 상대 승률이 가장 높았다. 50분과 120분 시간 예산에서는 PPO가 가장 높았다.
 - SAC는 스파이크·다이빙을 빼자 오히려 훨씬 강해졌고, DQN은 그 기술이 있어야 학습된 상대를 이겼다.
 - 탐험 하이퍼파라미터(PPO entropy, SAC 목표 엔트로피, DQN epsilon 구간)와 보조 보상은 신뢰구간 안의 차이만 만들었다. 탐험이 부족하면 seed 하나가 무너지는 일이 생겼다.
-- PPO는 self-play 비율을 0.9로 올리면 봇 상대 승률은 같지만 리그전에서 더 강해졌다.
+- PPO 학습률을 0.0003에서 0.001로 높이면 같은 300만 스텝에서 어려움 봇 상대 승률이 31.6%p 올랐다.
 
 ![리그전 Elo](docs/figures/league_elo.png)
 
@@ -257,6 +281,8 @@ GIF는 `python -m laser.record_steps steps` / `full`로 다시 만든다.
 
 ## 학습된 모델
 
+배구 E1~E11의 최종 정책 155개는 [모델 ZIP](https://github.com/changxeokSong/reinforcement_learning/releases/download/v3.0/volleyball_final_models.zip)에 있다. 저장소 루트에 풀고 `python play.py --left runs/e10/ppo_36m_seed0/model.pt --right hard`로 실행한다.
+
 [Releases v1.0](https://github.com/changxeokSong/reinforcement_learning/releases/tag/v1.0)에 있다.
 
 - `models_seed0.zip`: 설정 16개의 seed 0 모델. 풀어서 `python play.py --left models/e5_ppo_12m_seed0/model.pt --right hard`처럼 쓴다.
@@ -275,9 +301,9 @@ GIF는 `python -m laser.record_steps steps` / `full`로 다시 만든다.
 
 | 이름 | 학번 | 담당 |
 |---|---|---|
-| | | A: 환경 |
-| | | B: PPO, self-play |
-| | | C: DQN, SAC, 평가·분석 |
+| 팀원 1 | 확인 중 | 실제 담당 작업 확인 중 |
+| 팀원 2 | 확인 중 | 실제 담당 작업 확인 중 |
+| 팀원 3 | 확인 중 | 실제 담당 작업 확인 중 |
 
 ## 참고
 
@@ -285,4 +311,4 @@ GIF는 `python -m laser.record_steps steps` / `full`로 다시 만든다.
 - Mnih et al., *Human-level control through deep reinforcement learning*, 2015
 - van Hasselt et al., *Deep Reinforcement Learning with Double Q-learning*, 2016
 - Haarnoja et al., *Soft Actor-Critic*, 2018 / Christodoulou, *Soft Actor-Critic for Discrete Action Settings*, 2019
-- 코드 작성에 AI 코딩 도구(Claude Code)의 도움을 받았고, 팀원이 직접 읽고 검증했다.
+- 코드와 문서 작성에 Claude Code와 Codex를 사용했다. 검증 코드는 `tests/`에 있으며, 환경 동작·종료 조건과 알고리즘 갱신을 점검한다.

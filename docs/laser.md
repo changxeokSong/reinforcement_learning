@@ -297,3 +297,25 @@ Unity 에디터의 배치 실행에서 `LaserSolvabilityProbe.RunRotorAudit`를 
 .venv-unity\Scripts\python -m laser.policy_followup stage3 --build runs/laser_game_release/LaserMission.exe --campaign-attempts 1
 .venv-unity\Scripts\python -m laser.policy_followup stage3 --build runs/laser_game_release/LaserMission.exe
 ```
+
+### 충돌 예측 없이 6단계 추가 학습
+
+`laser.experiments long2`의 시드 3~7 체크포인트에서 actor를 불러온다. 학습은 6단계 절차 생성 배치에서 진행한다. 평가는 충돌 예측을 끄고, 6단계 단독 성공률과 10단계 순차 완주율을 같은 학습 시드끼리 비교한다.
+
+```powershell
+foreach ($seed in 3..7) {
+    .venv-unity\Scripts\python -m laser.train --algo ppo --seed $seed --worker 220 `
+        --out "runs/laser/l6_ppo48_finetune/seed$seed" `
+        --init-policy "runs/laser/long2/ppo_tuned_48m_seed$seed/model.pt" `
+        --set level=6 max_level=10 level6_design=2 build=runs/laser_refactor_release/LaserMission.exe `
+            lr=0.0001 hidden=128 total_steps=524288 'eval_levels=[6]' eval_interval=131072 eval_rounds=4 final_rounds=2
+}
+.venv-unity\Scripts\python -m laser.level6_finetune_eval
+```
+
+210만 스텝 실험은 같은 명령에서 출력 상위 폴더를 `l6_ppo48_finetune_2m`으로 바꾸고 `total_steps=2097152 eval_interval=524288`로 학습한다.
+
+```powershell
+.venv-unity\Scripts\python -m laser.level6_finetune_eval --finetuned-dir l6_ppo48_finetune_2m --eval-seed-base 142000 --out runs/results/laser/level6_finetune_2m.json
+.venv-unity\Scripts\python -m laser.level6_finetune_eval --finetuned-dir l6_ppo48_finetune_2m --eval-seed-base 142000 --stage6-only
+```

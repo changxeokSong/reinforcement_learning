@@ -58,12 +58,14 @@ def main():
     print(f"\n학습 단계 끝 ({(time.time() - start) / 60:.0f}분)", flush=True)
 
     all_dirs = [f"runs/{e}" for e in EXPERIMENTS]
-    run(["-m", "analysis.league", *all_dirs, "--points", args.league_points,
-         "--workers", str(args.parallel), "--out", "runs/results/league"])
+    league_path = "runs/results/league/league.json"
+    league_code = run(["-m", "analysis.league", *all_dirs, "--points", args.league_points,
+                       "--workers", str(args.parallel), "--out", "runs/results/league"])
     for name, dirs in COMPARISONS.items():
         run(["-m", "analysis.report", *dirs, "--out", f"runs/results/{name}",
-             "--league", "runs/results/league/league.json"])
-    run(["-m", "analysis.dashboard", *all_dirs, "--out", "runs/results/dashboard.html"])
+             "--league", league_path])
+    dashboard_options = ["--league", league_path] if league_code == 0 else []
+    run(["-m", "analysis.dashboard", *all_dirs, "--out", "runs/results/dashboard.html", *dashboard_options])
     print(f"\n전체 끝 ({(time.time() - start) / 60:.0f}분)", flush=True)
 
 

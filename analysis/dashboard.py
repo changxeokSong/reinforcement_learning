@@ -55,6 +55,8 @@ PAGE = r"""<!doctype html>
 .viz .row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-bottom: 8px; font-size: 12px; }
 .viz button { font: inherit; padding: 3px 9px; border: 1px solid var(--grid); border-radius: 6px;
   background: transparent; color: inherit; cursor: pointer; }
+.viz select { font: inherit; padding: 3px 8px; border: 1px solid var(--grid); border-radius: 6px;
+  color: inherit; background: var(--background, #fff); }
 .viz button[aria-pressed="true"] { background: var(--secondary, #ecebe6); font-weight: 600; }
 .viz .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; margin: 4px 0 6px; }
 .viz .key { display: inline-block; width: 16px; height: 0; border-top: 3px solid; vertical-align: middle; margin-right: 5px; }
@@ -74,6 +76,7 @@ PAGE = r"""<!doctype html>
 <div class="viz" id="viz">
   <h2 id="title"></h2>
   <div class="sub" id="sub"></div>
+  <div class="row"><label for="experiment">실험</label><select id="experiment"></select></div>
   <div class="row" id="metricRow"></div>
   <div class="row" id="xRow"></div>
   <div class="legend" id="legend"></div>
@@ -82,6 +85,7 @@ PAGE = r"""<!doctype html>
 </div>
 <script>
 const RUNS = __DATA__;
+const ELO = __ELO__;
 const STAMP = "__STAMP__";
 const LABEL = {wr_hard: "어려움 봇 상대 승률", wr_easy: "쉬움 봇 상대 승률", wr_random: "무작위 봇 상대 승률",
                spikes: "점당 스파이크 횟수", dives: "점당 다이빙 횟수", rally_sec: "랠리 길이(초)"};
@@ -98,11 +102,22 @@ const el = (tag, attrs = {}, text) => {
 const fmt = v => metric.startsWith("wr_") ? (v * 100).toFixed(0) + "%" : v.toFixed(2);
 const fmtX = v => xKey === "step" ? (v >= 1e6 ? (v / 1e6).toFixed(1) + "M" : Math.round(v / 1e3) + "k") : v.toFixed(0) + "분";
 
-function groups() {
+function groups(runs) {
   // 같은 설정의 seed들을 묶어 평균 곡선을 만든다 (모든 seed가 도달한 구간까지만)
   const by = {};
-  for (const r of RUNS) (by[r.group] ||= []).push(r);
+  for (const r of runs) (by[r.group] ||= []).push(r);
   return Object.entries(by).map(([name, rs]) => {
+    if (xKey === "min") {
+      const start = Math.max(...rs.map(r => r.min[0]));
+      const end = Math.min(...rs.map(r => r.min.at(-1)));
+      const x = [...new Set(rs.flatMap(r => r.min.filter(t => start <= t && t <= end)))].sort((a, b) => a - b);
+      const index = rs.map(() => 0);
+      const y = x.map(t => rs.reduce((sum, r, i) => {
+        while (index[i] + 1 < r.min.length && r.min[index[i] + 1] <= t) index[i]++;
+        return sum + r[metric][index[i]];
+      }, 0) / rs.length);
+      return {name, algo: rs[0].algo, runs: rs, x, y};
+    }
     const n = Math.min(...rs.map(r => r.step.length));
     const x = [], y = [];
     for (let i = 0; i < n; i++) {
@@ -122,10 +137,12 @@ function buttons(row, items, current, set) {
 }
 
 function draw() {
-  const G = groups();
-  $("title").textContent = LABEL[metric] + " (학습 스텝에 따른 변화)";
-  const running = RUNS.filter(r => !r.done).length;
-  $("sub").textContent = `실행 ${RUNS.length}개 · 학습 중 ${running}개 · 완료 ${RUNS.length - running}개 · 갱신 ${STAMP}`;
+  const selected = $("experiment").value;
+  const runs = selected ? RUNS.filter(r => r.name.split("/")[0] === selected) : RUNS;
+  const G = groups(runs);
+  $("title").textContent = LABEL[metric] + (xKey === "step" ? " (학습 스텝)" : " (실제 시간)");
+  const running = runs.filter(r => !r.done).length;
+  $("sub").textContent = `실행 ${runs.length}개 · 학습 중 ${running}개 · 완료 ${runs.length - running}개 · 갱신 ${STAMP}`;
   buttons($("metricRow"), Object.entries(LABEL), metric, k => metric = k);
   buttons($("xRow"), [["step", "가로축: 학습 스텝"], ["min", "가로축: 실제 시간(분)"]], xKey, k => xKey = k);
   $("legend").replaceChildren(...G.map(g => {
@@ -139,9 +156,9 @@ function draw() {
   const W = svg.clientWidth, H = 320, m = {l: 44, r: 96, t: 10, b: 28};
   svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
   svg.replaceChildren();
-  const xMax = Math.max(1, ...RUNS.map(r => r[xKey][r[xKey].length - 1]));
+  const xMax = Math.max(1, ...runs.map(r => r[xKey][r[xKey].length - 1]));
   const isRate = metric.startsWith("wr_");
-  const yMax = isRate ? 1 : Math.max(0.1, ...RUNS.flatMap(r => r[metric])) * 1.1;
+  const yMax = isRate ? 1 : Math.max(0.1, ...runs.flatMap(r => r[metric])) * 1.1;
   const X = v => m.l + v / xMax * (W - m.l - m.r), Y = v => H - m.b - v / yMax * (H - m.t - m.b);
   for (let i = 0; i <= 4; i++) {
     const v = yMax * i / 4;
@@ -157,6 +174,7 @@ function draw() {
     svg.append(el("path", {d: path(r[xKey], r[metric]), fill: "none", stroke: COLOR(g.algo), "stroke-width": 1, opacity: 0.3}));
   const ends = [];
   for (const g of G) {
+    if (!g.x.length) continue;
     svg.append(el("path", {d: path(g.x, g.y), fill: "none", stroke: COLOR(g.algo), "stroke-width": 2,
                            "stroke-linejoin": "round", "stroke-linecap": "round"}));
     const i = g.x.length - 1;
@@ -176,12 +194,13 @@ function draw() {
   svg.onpointermove = ev => {
     const box = svg.getBoundingClientRect();
     const xv = (ev.clientX - box.left - m.l) / (W - m.l - m.r) * xMax;
-    if (xv < 0 || xv > xMax || !G.length) return svg.onpointerleave();
-    const rows = G.map(g => {
+    if (xv < 0 || xv > xMax) return svg.onpointerleave();
+    const rows = G.filter(g => g.x.length).map(g => {
       let best = 0;
       g.x.forEach((x, i) => { if (Math.abs(x - xv) < Math.abs(g.x[best] - xv)) best = i; });
       return {g, x: g.x[best], y: g.y[best]};
     });
+    if (!rows.length) return svg.onpointerleave();
     const xs = rows[0].x;
     hair.setAttribute("x1", X(xs)); hair.setAttribute("x2", X(xs)); hair.setAttribute("visibility", "visible");
     tip.replaceChildren(el("div", {style: "color:var(--ink2);margin-bottom:3px"}, fmtX(xs)), ...rows.map(r => {
@@ -199,8 +218,10 @@ function draw() {
   // 표: 실행별 현재 값
   const t = $("table");
   const head = el("tr");
-  ["실행", "진행", "스텝", "시간(분)", "vs 무작위", "vs 쉬움", "vs 어려움", "스파이크", "다이빙"].forEach(h => head.append(el("th", {}, h)));
-  t.replaceChildren(head, ...RUNS.map(r => {
+  const columns = ["실행", "진행", "상태", "시간(분)", "vs 무작위", "vs 쉬움", "vs 어려움", "스파이크", "다이빙"];
+  if (ELO) columns.push("리그 Elo");
+  columns.forEach(h => head.append(el("th", {}, h)));
+  t.replaceChildren(head, ...runs.map(r => {
     const i = r.step.length - 1, tr = el("tr"), pct = Math.min(100, r.step[i] / r.total * 100);
     const name = el("td");
     name.append(el("span", {class: "key", style: `border-color:${COLOR(r.algo)}`}), document.createTextNode(r.name));
@@ -211,18 +232,28 @@ function draw() {
     const pc = v => (v * 100).toFixed(0) + "%";
     [r.done ? "완료" : (r.step[i] / 1e6).toFixed(1) + "M", r.min[i].toFixed(0), pc(r.wr_random[i]), pc(r.wr_easy[i]),
      pc(r.wr_hard[i]), r.spikes[i].toFixed(2), r.dives[i].toFixed(2)].forEach(v => tr.append(el("td", {}, v)));
+    if (ELO) tr.append(el("td", {}, ELO[r.name]?.toFixed(1) ?? "–"));
     return tr;
   }));
 }
+const experiment = $("experiment");
+const names = [...new Set(RUNS.map(r => r.name.split("/")[0]))];
+experiment.append(el("option", {value: ""}, "전체"), ...names.map(name => el("option", {value: name}, name)));
+experiment.onchange = draw;
 draw();
 addEventListener("resize", draw);
 </script></body></html>
 """
 
 
-def build(dirs, out, refresh=0):
+def build(dirs, out, refresh=0, league=None):
     runs = collect(dirs)
+    elo = None
+    if league is not None:
+        players = json.loads(Path(league).read_text(encoding="utf-8"))["players"]
+        elo = {player["name"]: player["elo"] for player in players}
     page = (PAGE.replace("__DATA__", json.dumps(runs, ensure_ascii=False))
+            .replace("__ELO__", json.dumps(elo, ensure_ascii=False))
             .replace("__STAMP__", time.strftime("%H:%M:%S"))
             .replace("__REFRESH__", f'<meta http-equiv="refresh" content="{refresh}">' if refresh else ""))
     Path(out).write_text(page, encoding="utf-8")
@@ -233,15 +264,16 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
     ap.add_argument("dirs", nargs="+")
     ap.add_argument("--out", default=None)
+    ap.add_argument("--league", type=Path, help="완료된 league.json의 Elo를 실행별 표에 표시")
     ap.add_argument("--watch", action="store_true", help="15초마다 다시 만든다 (Ctrl+C로 종료)")
     args = ap.parse_args()
     out = args.out or str(Path(args.dirs[0]) / "dashboard.html")
     if not args.watch:
-        print(f"실행 {build(args.dirs, out)}개 → {out}")
+        print(f"실행 {build(args.dirs, out, league=args.league)}개 → {out}")
         return
     print(f"{out} 을 브라우저로 여세요. 15초마다 갱신합니다. (Ctrl+C로 종료)")
     while True:
-        build(args.dirs, out, refresh=15)
+        build(args.dirs, out, refresh=15, league=args.league)
         time.sleep(15)
 
 
